@@ -21,7 +21,9 @@ export PATH="$HOME/.cargo/bin:$PATH"
 (cd engine && rustup toolchain install)  # reads rust-toolchain.toml
 
 echo "== Release tags (the app's version, see scripts/xcode.sh)"
-git fetch --tags --quiet || echo "warning: couldn't fetch the tags"
+# Xcode Cloud's clone is shallow and has no tags; scripts/xcode.sh takes the highest one.
+git fetch --tags --force --quiet origin || echo "warning: couldn't fetch the tags"
+git tag --list 'v[0-9]*' --sort=-v:refname | head -3
 
 echo "== local.env"
 {

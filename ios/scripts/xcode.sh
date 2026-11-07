@@ -68,13 +68,22 @@ prepare() {
   # The app's version: ANKIBASE_VERSION, else the latest release tag (v1.3.0 → 1.3.0). The
   # build number: ANKIBASE_BUILD_NUMBER (Xcode Cloud's, see ci_scripts/ci_post_clone.sh),
   # else the number of commits, so it goes up with every build of a newer commit.
-  version="${ANKIBASE_VERSION:-$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || true)}"
+  # A shallow clone (Xcode Cloud) can't reach the tag through its history: then the highest
+  # tag there is.
+  version="${ANKIBASE_VERSION:-$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null ||
+    git tag --list 'v[0-9]*' --sort=-v:refname 2>/dev/null | head -1)}"
   version="${version#v}"; version="${version%%-*}"
   build="${ANKIBASE_BUILD_NUMBER:-$(git rev-list --count HEAD 2>/dev/null || true)}"
-  if [ -z "$version" ] || [ -z "$build" ]; then
-    echo "error: no version or build number: set ANKIBASE_VERSION and ANKIBASE_BUILD_NUMBER in local.env, or tag a release (git tag v1.3.0)" >&2
+  if [ -z "$version" ]; then
+    echo "error: no version: set ANKIBASE_VERSION in local.env, or tag a release (git tag v1.3.0 && git push --tags)." >&2
+    echo "Tags in this checkout: $(git tag --list 'v[0-9]*' 2>&1 | tr '\n' ' ')" >&2
     exit 1
   fi
+  if [ -z "$build" ]; then
+    echo "error: no build number: set ANKIBASE_BUILD_NUMBER in local.env" >&2
+    exit 1
+  fi
+  echo "version $version, build $build"
   {
     echo "// Made by scripts/xcode.sh from local.env."
     echo "PRODUCT_BUNDLE_IDENTIFIER = ${ANKIBASE_BUNDLE_ID:-io.github.ankibase}"
