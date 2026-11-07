@@ -57,6 +57,8 @@ import oidc  # single sign-on (OpenID Connect)
 app.include_router(oidc.router)
 import app_login  # the phone app's login, on the server's own website
 app.include_router(app_login.router)
+import profile_sync  # sync accounts for profiles, so the apps set up sync by themselves
+app.include_router(profile_sync.router)
 
 
 class SecurityHeaders:

@@ -550,6 +550,9 @@ export const syncServer = {
     fetchAPI<SyncServerStatus>('/syncserver/accounts', { method: 'POST', body: JSON.stringify({ name, password }) }),
   removeAccount: (name: string, deleteData: boolean) =>
     fetchAPI<SyncServerStatus>(`/syncserver/accounts/${encodeURIComponent(name)}?delete_data=${deleteData}`, { method: 'DELETE' }),
+  /** The current profile's own sync account (made on first use), for the apps to sync with. */
+  profileAccount: () =>
+    fetchAPI<{ username: string; password: string; profile_connected: boolean }>('/syncserver/profile-account', { method: 'POST' }),
 };
 
 // Account Management

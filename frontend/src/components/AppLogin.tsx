@@ -1,8 +1,18 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Globe, Loader2, LogIn, Smartphone, X } from 'lucide-react';
-import { auth } from '../api';
+import { ankiweb, auth, syncServer } from '../api';
 import { appStatus, device, onWebsiteLogin, startWebsiteLogin, useAppStatus } from '../native';
+
+/** Sync with the profile's own account on the server's sync server, if the phone doesn't sync
+ *  anywhere yet (backend/profile_sync.py). Best effort: otherwise Settings → Sync as before. */
+async function setUpSync(server: string) {
+  try {
+    if ((await ankiweb.status()).configured) return;
+    const account = await syncServer.profileAccount();
+    await ankiweb.login(account.username, account.password, `${server.replace(/\/+$/, '')}/syncserver/`);
+  } catch { /* no sync server, or it didn't answer */ }
+}
 
 /** The iPhone app's login: enter the server's address, then log in on its own website (password
  *  or single sign-on) in the system's sign-in sheet (backend/app_login.py). Not a full-screen
@@ -22,8 +32,9 @@ export function AppLoginModal({ onClose }: { onClose: () => void }) {
     }
     try {
       await auth.appSession(result.code, result.verifier);
-      await appStatus.refresh().catch(() => {});
-      window.location.replace('/');
+      const status = await appStatus.refresh().catch(() => null);
+      if (status?.server) await setUpSync(status.server);
+      window.location.replace('/');  // the app syncs on start
     } catch (err) {
       setBusy(null);
       setError(err instanceof Error ? err.message : 'Couldn’t log in, try again');
