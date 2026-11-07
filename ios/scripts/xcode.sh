@@ -65,9 +65,22 @@ prepare() {
   sync ../frontend/dist Sources/AnkiBase/Resources/web
 
   echo "== This build's settings (local.env)"
+  # The app's version: ANKIBASE_VERSION, else the latest release tag (v1.3.0 → 1.3.0). The
+  # build number: ANKIBASE_BUILD_NUMBER (Xcode Cloud's, see ci_scripts/ci_post_clone.sh),
+  # else the number of commits, so it goes up with every build of a newer commit.
+  version="${ANKIBASE_VERSION:-$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || true)}"
+  version="${version#v}"; version="${version%%-*}"
+  build="${ANKIBASE_BUILD_NUMBER:-$(git rev-list --count HEAD 2>/dev/null || true)}"
+  if [ -z "$version" ] || [ -z "$build" ]; then
+    echo "error: no version or build number: set ANKIBASE_VERSION and ANKIBASE_BUILD_NUMBER in local.env, or tag a release (git tag v1.3.0)" >&2
+    exit 1
+  fi
   {
     echo "// Made by scripts/xcode.sh from local.env."
     echo "PRODUCT_BUNDLE_IDENTIFIER = ${ANKIBASE_BUNDLE_ID:-io.github.ankibase}"
+    # Xcode's generated Info.plist (GENERATE_INFOPLIST_FILE) takes the version from these.
+    echo "MARKETING_VERSION = $version"
+    echo "CURRENT_PROJECT_VERSION = $build"
     [ -z "${ANKIBASE_TEAM_ID:-}" ] || echo "DEVELOPMENT_TEAM = $ANKIBASE_TEAM_ID"
   } > "$out/Local.xcconfig.new"
   if cmp -s "$out/Local.xcconfig.new" "$out/Local.xcconfig"; then

@@ -20,6 +20,9 @@ fi
 export PATH="$HOME/.cargo/bin:$PATH"
 (cd engine && rustup toolchain install)  # reads rust-toolchain.toml
 
+echo "== Release tags (the app's version, see scripts/xcode.sh)"
+git fetch --tags --quiet || echo "warning: couldn't fetch the tags"
+
 echo "== local.env"
 {
   echo "# Made by ci_scripts/ci_post_clone.sh from the Xcode Cloud workflow's environment."
@@ -28,6 +31,8 @@ echo "== local.env"
   done
   # Xcode Cloud numbers its builds itself; the app's build number (CFBundleVersion) follows.
   [ -z "${CI_BUILD_NUMBER:-}" ] || echo "ANKIBASE_BUILD_NUMBER=$CI_BUILD_NUMBER"
+  # Built from a tag (v1.4.0): that's the version; otherwise scripts/xcode.sh takes the latest tag.
+  [ -z "${CI_TAG:-}" ] || echo "ANKIBASE_VERSION=${CI_TAG#v}"
 } > local.env
 cat local.env
 
