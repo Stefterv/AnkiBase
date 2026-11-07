@@ -75,10 +75,7 @@ pub fn handle(engine: &mut Engine, request: &Request) -> Option<Reply> {
         ("POST", ["review", "undo"]) => body::<ReviewRequest>(data).and_then(|r| engine.undo(&r.deck)),
         ("GET", ["media-file", name]) => {
             return Some(match engine.media_file(name) {
-                Ok(bytes) => Reply::new(200, mime_type(name), bytes)
-                    .with_header("Cache-Control", "max-age=3600")
-                    // Card media is from anywhere: a file opened on its own can't run scripts.
-                    .with_header("Content-Security-Policy", "sandbox; default-src 'none'; img-src data:; style-src 'unsafe-inline'"),
+                Ok(bytes) => media_reply(name, bytes, request.header("range")),
                 Err(err) => failure(err),
             });
         }
@@ -160,4 +157,67 @@ fn multipart_file(request: &Request) -> Option<(String, Vec<u8>)> {
 
 fn find(haystack: &[u8], needle: &[u8], from: usize) -> Option<usize> {
     haystack.get(from..)?.windows(needle.len()).position(|w| w == needle).map(|i| i + from)
+}
+
+/// A collection media file. WebKit's media player (card audio and video) reads files in byte
+/// ranges and gives up without them ("AudioVideoRenderer… destroyed"): a `Range` gets just
+/// those bytes (206), and every answer says its length and that ranges work.
+pub fn media_reply(name: &str, bytes: Vec<u8>, range: Option<&str>) -> Reply {
+    let total = bytes.len();
+    let reply = |status: u16, body: Vec<u8>| {
+        let length = body.len().to_string();
+        Reply::new(status, mime_type(name), body)
+            .with_header("Cache-Control", "max-age=3600")
+            // Card media is from anywhere: a file opened on its own can't run scripts.
+            .with_header("Content-Security-Policy", "sandbox; default-src 'none'; img-src data:; style-src 'unsafe-inline'")
+            .with_header("Accept-Ranges", "bytes")
+            .with_header("Content-Length", &length)
+    };
+    let Some(range) = range else { return reply(200, bytes) };
+    match byte_range(range, total) {
+        Some((start, end)) => reply(206, bytes[start..=end].to_vec())
+            .with_header("Content-Range", &format!("bytes {start}-{end}/{total}")),
+        None => Reply::new(416, "text/plain", Vec::new()).with_header("Content-Range", &format!("bytes */{total}")),
+    }
+}
+
+/// `bytes=a-b`, `bytes=a-` or `bytes=-n` as first and last byte, within `total`.
+fn byte_range(header: &str, total: usize) -> Option<(usize, usize)> {
+    let spec = header.trim().strip_prefix("bytes=")?.split(',').next()?.trim();
+    let (from, to) = spec.split_once('-')?;
+    if total == 0 {
+        return None;
+    }
+    let (start, end) = match (from.trim(), to.trim()) {
+        ("", n) => {
+            let n: usize = n.parse().ok()?;
+            (total.saturating_sub(n), total - 1)
+        }
+        (a, "") => (a.parse().ok()?, total - 1),
+        (a, b) => (a.parse().ok()?, b.parse::<usize>().ok()?.min(total - 1)),
+    };
+    (start <= end && start < total).then_some((start, end))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn media_ranges() {
+        assert_eq!(byte_range("bytes=0-1", 10), Some((0, 1)));
+        assert_eq!(byte_range("bytes=4-", 10), Some((4, 9)));
+        assert_eq!(byte_range("bytes=-3", 10), Some((7, 9)));
+        assert_eq!(byte_range("bytes=5-99", 10), Some((5, 9)));
+        assert_eq!(byte_range("bytes=10-", 10), None);
+        assert_eq!(byte_range("bytes=0-1", 0), None);
+        let r = media_reply("a.mp3", b"0123456789".to_vec(), Some("bytes=0-1"));
+        assert_eq!((r.status, r.body.as_slice()), (206, &b"01"[..]));
+        let header = |r: &Reply, n: &str| r.headers.iter().find(|(k, _)| k == n).map(|(_, v)| v.clone());
+        assert_eq!(header(&r, "Content-Range").as_deref(), Some("bytes 0-1/10"));
+        assert_eq!(header(&r, "Content-Length").as_deref(), Some("2"));
+        let full = media_reply("a.mp3", b"0123456789".to_vec(), None);
+        assert_eq!((full.status, header(&full, "Accept-Ranges").as_deref()), (200, Some("bytes")));
+        assert_eq!(media_reply("a.mp3", b"01".to_vec(), Some("bytes=5-")).status, 416);
+    }
 }
