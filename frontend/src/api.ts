@@ -122,8 +122,10 @@ export const auth = {
 export interface OidcConfig {
   enabled: boolean; issuer: string; client_id: string; has_secret: boolean; name: string; scopes: string;
   redirect_uri: string; auto_create: boolean; source: 'settings' | 'env' | 'none'; default_redirect_uri: string;
+  /** Profiles users made by auto-create get; `profiles` lists them all. */
+  default_profiles: number[]; profiles: { id: number; name: string }[];
 }
-export type OidcConfigUpdate = Omit<OidcConfig, 'has_secret' | 'source' | 'default_redirect_uri'> & { client_secret?: string | null };
+export type OidcConfigUpdate = Omit<OidcConfig, 'has_secret' | 'source' | 'default_redirect_uri' | 'profiles'> & { client_secret?: string | null };
 
 export const oidcAdmin = {
   get: () => fetchAPI<OidcConfig>('/admin/oidc'),

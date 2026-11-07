@@ -47,7 +47,7 @@ You can also set it in `backend/.env` (restart afterwards). These are used until
 | `OIDC_REDIRECT_URI` | The callback URL, when AnkiBase can't work it out from the request | `<server>/api/auth/oidc/callback` |
 | `OIDC_AUTO_CREATE` | Make a user for provider accounts that aren't connected to one yet (“Create users automatically”) | `false` |
 
-The login page then shows **Sign in with …**. Users are matched by their provider account, never by name or e-mail: existing users connect theirs once under **Settings → Account → Connect**, after signing in with their password. With `OIDC_AUTO_CREATE=true`, anyone the provider lets in gets a new user (no admin rights, no profiles until an admin gives them some), so limit who can use the application at the provider.
+The login page then shows **Sign in with …**. Users are matched by their provider account, never by name or e-mail: existing users connect theirs once under **Settings → Account → Connect**, after signing in with their password. With `OIDC_AUTO_CREATE=true`, anyone the provider lets in gets a new user: no admin rights, and only the profiles picked under **New users can use** in Settings → Users (none by default), so limit who can use the application at the provider.
 
 <Callout type="info">
 Single sign-on works in the browser. The iPhone and Android apps keep using a username and password.

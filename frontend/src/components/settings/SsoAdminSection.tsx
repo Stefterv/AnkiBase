@@ -24,7 +24,8 @@ export function SsoAdminSection() {
     return <section className="card">{error ? <p className="text-sm text-(--error)">{error}</p> : <div className="skeleton h-24 rounded-lg" />}</section>;
   }
   const set = <K extends keyof OidcConfig>(k: K, v: OidcConfig[K]) => { setForm({ ...form, [k]: v }); setDone(''); };
-  const dirty = secret !== '' || (['enabled', 'issuer', 'client_id', 'name', 'scopes', 'redirect_uri', 'auto_create'] as const).some(k => form[k] !== saved[k]);
+  const dirty = secret !== '' || (['enabled', 'issuer', 'client_id', 'name', 'scopes', 'redirect_uri', 'auto_create'] as const).some(k => form[k] !== saved[k])
+    || [...form.default_profiles].sort().join() !== [...saved.default_profiles].sort().join();
   const callback = form.redirect_uri || form.default_redirect_uri;
 
   const run = async (action: () => Promise<OidcConfig>, message: string) => {
@@ -35,7 +36,7 @@ export function SsoAdminSection() {
   };
   const save = () => run(() => oidcAdmin.save({
     enabled: form.enabled, issuer: form.issuer, client_id: form.client_id, name: form.name, scopes: form.scopes,
-    redirect_uri: form.redirect_uri, auto_create: form.auto_create, client_secret: secret || null,
+    redirect_uri: form.redirect_uri, auto_create: form.auto_create, default_profiles: form.default_profiles, client_secret: secret || null,
   }), form.enabled ? 'Saved. The login page now offers single sign-on.' : 'Saved.');
   const copy = async () => {
     try { await navigator.clipboard.writeText(callback); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* no clipboard */ }
@@ -102,6 +103,26 @@ export function SsoAdminSection() {
             </span>
           </span>
         </label>
+        {form.auto_create && (
+          <div className="space-y-1.5 pl-3">
+            <p className={label}>New users can use</p>
+            {form.profiles.length === 0 ? <p className="text-xs text-(--text-secondary)">No profiles yet.</p> : (
+              <div className="flex flex-wrap gap-1.5">
+                {form.profiles.map(p => {
+                  const on = form.default_profiles.includes(p.id);
+                  return (
+                    <button key={p.id} type="button" aria-pressed={on}
+                      onClick={() => set('default_profiles', on ? form.default_profiles.filter(x => x !== p.id) : [...form.default_profiles, p.id])}
+                      className={`h-8 px-3 rounded-lg text-xs inline-flex items-center gap-1.5 transition-colors ${on ? 'bg-(--accent)/15 text-white ring-1 ring-(--accent)/50' : 'bg-(--bg-tertiary) text-(--text-secondary) hover:text-white'}`}>
+                      {on && <Check className="w-3.5 h-3.5 text-(--accent)" />}{p.name}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            <p className="text-xs text-(--text-secondary)">{form.default_profiles.length ? 'They can study in these right after their first sign-in.' : 'None: they wait until you give them a profile in the list below.'}</p>
+          </div>
+        )}
 
         <button type="button" onClick={() => setAdvanced(a => !a)} className="text-xs text-(--text-secondary) hover:text-white inline-flex items-center gap-1">
           <ChevronRight className={`w-3.5 h-3.5 transition-transform ${advanced ? 'rotate-90' : ''}`} /> Advanced

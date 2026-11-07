@@ -18,7 +18,7 @@ import json
 import re
 import secrets
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 from urllib.parse import urlencode
 
@@ -52,6 +52,8 @@ class Config:
     # Make a user for provider accounts that aren't linked to one yet (no profiles until an
     # admin gives them some). Off: only users who connected SSO in Settings → Account.
     auto_create: bool = False
+    # The profiles (anki_accounts ids) a user made by auto_create can use straight away.
+    default_profiles: list = field(default_factory=list)
     source: str = "settings"  # where it comes from: "settings" (Settings → Users), "env" (.env) or "none"
 
 
@@ -293,6 +295,9 @@ async def oidc_callback(request: Request, code: str = "", state: str = "", error
         username = _new_username(claims)
         owner = create_user(username, secrets.token_urlsafe(32))  # a password nobody knows…
         set_password_login(owner, False)  # …and password sign-in off for them
+        from database import get_all_accounts, set_user_container_permissions
+        known = {a["id"] for a in get_all_accounts()}
+        set_user_container_permissions(owner, [p for p in get_config().default_profiles if p in known])
         link_oidc_identity(owner, issuer, subject)
         print(f"✓ Made user '{username}' for a single sign-on account")
 
@@ -337,12 +342,17 @@ class ConfigUpdate(BaseModel):
     scopes: str = "openid profile email"
     redirect_uri: str = ""
     auto_create: bool = False
+    default_profiles: list[int] = []
 
 
 def _admin_view(cfg: Config, request: Request) -> dict:
     data = {k: v for k, v in cfg.__dict__.items() if k != "client_secret"}
     data["has_secret"] = bool(cfg.client_secret)
     data["default_redirect_uri"] = _redirect_uri_default(request)
+    from database import get_all_accounts
+    data["profiles"] = [{"id": a["id"], "name": a["container_name"]} for a in get_all_accounts()]
+    # Profiles deleted since don't count.
+    data["default_profiles"] = [p for p in cfg.default_profiles if any(a["id"] == p for a in data["profiles"])]
     return data
 
 
@@ -365,7 +375,8 @@ async def oidc_config_update(body: ConfigUpdate, request: Request, _: dict = Dep
         enabled=body.enabled, issuer=body.issuer.strip(), client_id=body.client_id.strip(),
         client_secret=current.client_secret if body.client_secret is None else body.client_secret.strip(),
         name=body.name.strip()[:40] or "SSO", scopes=" ".join(body.scopes.split()) or "openid profile email",
-        redirect_uri=body.redirect_uri.strip(), auto_create=body.auto_create, source="settings",
+        redirect_uri=body.redirect_uri.strip(), auto_create=body.auto_create,
+        default_profiles=sorted(set(body.default_profiles)), source="settings",
     )
     if cfg.issuer and not re.match(r"^https?://", cfg.issuer):
         raise HTTPException(status_code=400, detail="The issuer is a URL, like https://auth.example.com/application/o/ankibase/")
