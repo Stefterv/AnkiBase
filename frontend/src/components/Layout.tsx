@@ -9,7 +9,8 @@ import { SyncConflictModal } from './SyncConflictModal';
 import { UpdateModal } from './UpdateModal';
 import { createPortal } from 'react-dom';
 import { MotionLayer } from './MotionLayer';
-import { appStatus, hasNativeTabs, hasServer, isIOS, isNative, nativeReady, onNativeOpen, onNativeTab, setNativeTabs, useAppStatus, useOverlayOpen } from '../native';
+import { appStatus, canLogInWithWebsite, hasNativeTabs, hasServer, isIOS, isNative, nativeReady, onNativeOpen, onNativeTab, OPEN_LOGIN_EVENT, setNativeTabs, useAppStatus, useOverlayOpen } from '../native';
+import { AppLoginModal } from './AppLogin';
 import { runSync, useAutoSync, useSyncState, type SyncResult } from '../sync';
 import { useStudyBadge } from '../hooks/useStudyBadge';
 
@@ -83,6 +84,25 @@ export function Layout() {
   const serverFeatures = hasServer(app);
   const offline = isNative && !!app?.server && !app.online;
   useAutoSync();
+
+  // The iPhone app's login modal: the header's Log in button, a request that needs a login
+  // (api.ts), or /login (App.tsx sends that here as ?login). Moving on (a tab) closes it.
+  // Open on the page it was opened on, so going elsewhere closes it.
+  const [loginAt, setLoginAt] = useState<string | null>(null);
+  const loginParam = canLogInWithWebsite && new URLSearchParams(location.search).has('login');
+  const loginOpen = loginParam || loginAt === location.pathname;
+  const openLogin = () => setLoginAt(window.location.pathname);
+  const closeLogin = () => {
+    setLoginAt(null);
+    if (loginParam) navigate(location.pathname, { replace: true });
+  };
+  const loggedOut = canLogInWithWebsite && !!app && (!app.server || !app.server_login);
+  useEffect(() => {
+    if (!canLogInWithWebsite) return;
+    const open = () => setLoginAt(window.location.pathname);
+    window.addEventListener(OPEN_LOGIN_EVENT, open);
+    return () => window.removeEventListener(OPEN_LOGIN_EVENT, open);
+  }, []);
   const [toasts, setToasts] = useState<ToastData[]>([]);
   const toastIdRef = useRef(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -262,12 +282,12 @@ export function Layout() {
               <span className="hidden sm:inline">{t('settings.title')}</span>
             </Link>
 
-            {/* The app on its own (no server): sign in to one, with a password or single sign-on. */}
-            {isNative && app && !app.server && (
-              <Link to="/login" className="btn btn-primary header-btn flex items-center gap-2" title="Log in to an AnkiBase server">
+            {/* The iPhone app, not logged in to a server: log in on the server's website. */}
+            {loggedOut && (
+              <button onClick={openLogin} className="btn btn-primary header-btn w-9 !px-0 shrink-0 flex items-center justify-center"
+                title="Log in" aria-label="Log in">
                 <LogIn className="w-4 h-4" />
-                <span>Log in</span>
-              </Link>
+              </button>
             )}
 
             {!isNative && (
@@ -283,6 +303,7 @@ export function Layout() {
           </div>
         </div>
       </header>
+      {loginOpen && <AppLoginModal onClose={closeLogin} />}
 
       {/* Desktop Navigation - hidden on mobile */}
       <nav className="hidden md:block bg-(--bg-secondary) border-b border-(--bg-tertiary)">

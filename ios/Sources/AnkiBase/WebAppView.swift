@@ -172,8 +172,8 @@ struct WebAppView: UIViewRepresentable {
                 StoryAlerts.shared.pageReady()
             case "story-alerts":
                 StoryAlerts.shared.requestPermission()
-            case "sso":
-                if let start = (body["url"] as? String).flatMap(URL.init(string:)) { signIn(start) }
+            case "login":
+                if let handoff = (body["url"] as? String).flatMap(URL.init(string:)) { logIn(handoff) }
             default:
                 break
             }
@@ -186,45 +186,42 @@ struct WebAppView: UIViewRepresentable {
             web?.evaluateJavaScript("window.dispatchEvent(new CustomEvent('\(event)', {detail: \(json)}))")
         }
 
-        // MARK: Single sign-on (native.ts startSso, backend/oidc.py)
+        // MARK: Logging in on the server's website (native.ts startWebsiteLogin, backend/app_login.py)
 
-        private var signInSession: ASWebAuthenticationSession?
+        private var loginSession: ASWebAuthenticationSession?
 
-        /// Sign in with the server's provider in the system's browser sheet. It closes on the
-        /// server's `ankibase://sso?code=…`; the page then trades the code and this secret for a
-        /// session through the engine, which keeps the cookie. Only the SHA-256 of the secret
-        /// travels through the browser (PKCE), so a code caught on the way is no use alone.
-        private func signIn(_ start: URL) {
-            guard signInSession == nil, var parts = URLComponents(url: start, resolvingAgainstBaseURL: false) else { return }
+        /// The server's website in the system's sign-in sheet, at its app handoff: its login page
+        /// (password or single sign-on), then `ankibase://login?code=…`, which closes the sheet.
+        /// The page trades the code and this secret for a session through the engine, which
+        /// keeps the cookie. Only the secret's SHA-256 goes through the browser (PKCE).
+        private func logIn(_ handoff: URL) {
+            guard loginSession == nil, var parts = URLComponents(url: handoff, resolvingAgainstBaseURL: false) else { return }
             var bytes = [UInt8](repeating: 0, count: 32)
             guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else { return }
             let verifier = Self.base64url(Data(bytes))
             let challenge = Self.base64url(Data(SHA256.hash(data: Data(verifier.utf8))))
-            parts.queryItems = (parts.queryItems ?? []) + [URLQueryItem(name: "app", value: "true"),
-                                                           URLQueryItem(name: "challenge", value: challenge)]
+            parts.queryItems = (parts.queryItems ?? []) + [URLQueryItem(name: "challenge", value: challenge)]
             guard let url = parts.url else { return }
             let session = ASWebAuthenticationSession(url: url, callbackURLScheme: AppSchemeHandler.scheme) { [weak self] callback, error in
                 DispatchQueue.main.async {
-                    self?.signInSession = nil
+                    self?.loginSession = nil
                     let query = callback.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems } ?? []
-                    let value = { (name: String) in query.first { $0.name == name }?.value }
-                    if let code = value("code") {
-                        self?.send("ankibase-sso", ["code": code, "verifier": verifier])
-                    } else if let failure = value("error") {
-                        self?.send("ankibase-sso", ["error": failure])
+                    if let code = query.first(where: { $0.name == "code" })?.value {
+                        self?.send("ankibase-login", ["code": code, "verifier": verifier])
                     } else {
                         let cancelled = (error as? ASWebAuthenticationSessionError)?.code == .canceledLogin
-                        self?.send("ankibase-sso", ["error": cancelled ? "cancelled" : "provider_unreachable"])
+                        self?.send("ankibase-login", ["error": cancelled ? "cancelled" : "failed"])
                     }
                 }
             }
             session.presentationContextProvider = self
-            // Shares Safari's cookies, so a provider you're signed in to doesn't ask again.
-            session.prefersEphemeralWebBrowserSession = false
-            signInSession = session
+            // Its own cookies: the website's login every time (no "wants to use … to sign in"
+            // prompt, and no browser login of someone else's carried over).
+            session.prefersEphemeralWebBrowserSession = true
+            loginSession = session
             if !session.start() {
-                signInSession = nil
-                send("ankibase-sso", ["error": "provider_unreachable"])
+                loginSession = nil
+                send("ankibase-login", ["error": "failed"])
             }
         }
 

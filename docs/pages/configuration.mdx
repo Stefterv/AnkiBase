@@ -50,7 +50,7 @@ You can also set it in `backend/.env` (restart afterwards). These are used until
 The login page then shows **Sign in with …**. Users are matched by their provider account, never by name or e-mail: existing users connect theirs once under **Settings → Account → Connect**, after signing in with their password. With `OIDC_AUTO_CREATE=true`, anyone the provider lets in gets a new user without admin rights. Under **New users study in** you choose what they get: **Their own profile** (a private profile named after them, optionally starting with a fresh copy of another profile's decks: same cards and media, no progress) or **Shared profiles** (access to existing profiles, shared with everyone who has them), so limit who can use the application at the provider.
 
 <Callout type="info">
-Single sign-on works in the browser and in the iPhone app: after you enter the server's address, **Sign in with …** opens the provider's page in a sign-in sheet and returns to the app. The provider needs nothing extra (the same redirect URI). The Android app keeps using a username and password for now.
+Single sign-on works in the browser and in the iPhone app. The iPhone app logs in on the server's own website: **Log in** (top right) asks for the server's address and opens its login page in a sign-in sheet, with the password and **Sign in with …** as in the browser, then returns to the app. The provider needs nothing extra (the same redirect URI). The Android app keeps using a username and password for now.
 </Callout>
 
 ## AI Providers

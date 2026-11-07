@@ -8,6 +8,7 @@ loadAccentColor();
 loadBaseColors();
 import { Logo } from './components/Logo';
 import { Login } from './components/Login';
+import { canLogInWithWebsite } from './native';
 import { Layout } from './components/Layout';
 import { Decks } from './components/Decks';
 import { Study } from './components/Study';
@@ -65,7 +66,9 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return authenticated ? <>{children}</> : <Navigate to="/login" replace />;
+  // The iPhone app works without a login (the collection is on the phone); logging in to a
+  // server is the layout's login modal.
+  return authenticated || canLogInWithWebsite ? <>{children}</> : <Navigate to="/login" replace />;
 }
 
 function App() {
@@ -73,7 +76,7 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/setup" element={<Setup />} />
-        <Route path="/login" element={<Login />} />
+        <Route path="/login" element={canLogInWithWebsite ? <Navigate to="/?login" replace /> : <Login />} />
         <Route
           path="/"
           element={

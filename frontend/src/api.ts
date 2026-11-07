@@ -23,7 +23,13 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> 
 
   if (response.status === 401) {
     if (!endpoint.includes('/auth/login')) {
-      window.location.href = '/login';
+      // The iPhone app keeps working without a login (the collection is on the phone): offer
+      // the login modal instead of leaving the page (native.ts openAppLogin).
+      if ((window as { ankibaseNative?: { platform?: string } }).ankibaseNative?.platform === 'ios') {
+        window.dispatchEvent(new CustomEvent('ankibase-open-login'));
+      } else {
+        window.location.href = '/login';
+      }
       throw new Error('Unauthorized');
     }
     const body = await response.json().catch(() => ({}));
@@ -94,9 +100,9 @@ export const auth = {
   /** Whether the server offers single sign-on, and its name (no login needed). */
   sso: () => fetchAPI<{ enabled: boolean; name: string }>('/auth/oidc'),
   unlinkSso: () => fetchAPI<{ success: boolean }>('/auth/oidc/link', { method: 'DELETE' }),
-  /** The phone app's sign-in: the one-time code and secret from the sign-in sheet, for a session. */
-  ssoAppSession: (code: string, verifier: string) =>
-    fetchAPI<{ success: boolean }>('/auth/oidc/app-session', { method: 'POST', body: JSON.stringify({ code, verifier }) }),
+  /** The phone app's login: the one-time code and secret from the sign-in sheet, for a session. */
+  appSession: (code: string, verifier: string) =>
+    fetchAPI<{ success: boolean }>('/auth/app-session', { method: 'POST', body: JSON.stringify({ code, verifier }) }),
   changePassword: (currentPassword: string, newPassword: string) =>
     fetchAPI<{ success: boolean; message: string }>('/auth/change-password', {
       method: 'POST',

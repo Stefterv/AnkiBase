@@ -3,7 +3,6 @@ export const SSO_ERRORS: Record<string, string> = {
   not_linked: 'That account isn’t connected to an AnkiBase user. Sign in with your password and connect it in Settings → Account.',
   taken: 'That account is already connected to another AnkiBase user.',
   denied: 'Sign-in was cancelled.',
-  cancelled: 'Sign-in was cancelled.',
   expired: 'The sign-in took too long, try again.',
   state: 'The sign-in couldn’t be verified, try again.',
   login_first: 'Sign in first, then connect your account.',

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Eye, EyeOff, KeyRound, Loader2, Server, Smartphone } from 'lucide-react';
+import { Eye, EyeOff, KeyRound, Server, Smartphone } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ApiError, auth, setup, theme as themeApi } from '../api';
@@ -7,7 +7,7 @@ import { ApiError, auth, setup, theme as themeApi } from '../api';
 import { Logo } from './Logo';
 import { SSO_ERRORS } from './settings/ssoErrors';
 import { applyAccentColor, saveAccentColor, applyBaseColors, saveBaseColors } from '../hooks/useAccentColor';
-import { appStatus, canSsoInApp, device, isNative, onNativeSso, startSso, useAppStatus } from '../native';
+import { appStatus, device, isNative, useAppStatus } from '../native';
 
 const MAX_ATTEMPTS = 5;
 const SS_UNTIL = 'ankibase-login-lockout';
@@ -27,9 +27,10 @@ export function Login() {
   const [serverError, setServerError] = useState('');
   const [sso, setSso] = useState<{ enabled: boolean; name: string } | null>(null);
   const [params] = useSearchParams();
-  const [appSsoError, setAppSsoError] = useState<string | null>(null);
-  const [ssoBusy, setSsoBusy] = useState(false);
-  const ssoError = appSsoError ?? params.get('sso_error');
+  const ssoError = params.get('sso_error');
+  // In the iPhone app's sign-in sheet: back to its handoff after logging in (backend/app_login.py).
+  const nextRaw = params.get('next');
+  const next = nextRaw && nextRaw.startsWith('/api/auth/app-handoff?') && !nextRaw.includes('//') ? nextRaw : null;
 
   // Restore lockout from sessionStorage on mount
   useEffect(() => {
@@ -51,41 +52,10 @@ export function Login() {
       themeApi.getBase().then(c => applyBaseColors(c)).catch(() => {});
   }, [navigate]);
 
-  // Single sign-on: in the browser, and in the iPhone app once it has a server (asked again
-  // when the server changes). The Android app doesn't have the sign-in sheet yet.
-  const appServer = app?.server ?? null;
+  // Single sign-on: on the website (the iPhone app shows the website too, in its sign-in sheet).
   useEffect(() => {
-    setSso(null);
-    if (isNative && (!canSsoInApp || !appServer)) return;
-    let cancelled = false;
-    auth.sso().then(s => { if (!cancelled) setSso(s); }).catch(() => {});
-    return () => { cancelled = true; };
-  }, [appServer]);
-
-  // The iPhone app's sign-in sheet came back: trade its code for a session (the app keeps the cookie).
-  useEffect(() => onNativeSso(async result => {
-    if (!result.code || !result.verifier) {
-      setSsoBusy(false);
-      if (result.error !== 'cancelled') setAppSsoError(result.error ?? 'provider');
-      return;
-    }
-    try {
-      await auth.ssoAppSession(result.code, result.verifier);
-      await appStatus.refresh().catch(() => {});
-      navigate('/', { replace: true });
-    } catch (err) {
-      setAppSsoError(null);
-      setError(err instanceof Error ? err.message : 'Couldn’t sign in, try again');
-    } finally {
-      setSsoBusy(false);
-    }
-  }), [navigate]);
-
-  const signInWithSso = () => {
-    if (!appServer) return;
-    setError(''); setAppSsoError(null); setSsoBusy(true);
-    startSso(`${appServer.replace(/\/+$/, '')}/api/auth/oidc/start`);
-  };
+    if (!isNative) auth.sso().then(setSso).catch(() => {});
+  }, []);
 
   // Countdown tick
   useEffect(() => {
@@ -130,7 +100,8 @@ export function Login() {
         }
       } catch {}
       sessionStorage.removeItem(SS_UNTIL);
-      navigate('/', { replace: true });
+      if (next) window.location.assign(next);  // back to the app
+      else navigate('/', { replace: true });
 
     } catch (err: unknown) {
       const e = err instanceof ApiError ? err : undefined;
@@ -245,15 +216,10 @@ export function Login() {
             <div className="flex items-center gap-3 my-5 text-xs text-(--text-secondary)">
               <div className="flex-1 h-px bg-(--bg-tertiary)" /> or <div className="flex-1 h-px bg-(--bg-tertiary)" />
             </div>
-            {isNative ? (
-              <button type="button" onClick={signInWithSso} disabled={ssoBusy} className="btn btn-secondary w-full flex items-center justify-center gap-2 disabled:opacity-60">
-                {ssoBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />} Sign in with {sso.name}
-              </button>
-            ) : (
-              <a href="/api/auth/oidc/start" className="btn btn-secondary w-full flex items-center justify-center gap-2">
-                <KeyRound className="w-4 h-4" /> Sign in with {sso.name}
-              </a>
-            )}
+            <a href={'/api/auth/oidc/start' + (next ? `?next=${encodeURIComponent(next)}` : '')}
+              className="btn btn-secondary w-full flex items-center justify-center gap-2">
+              <KeyRound className="w-4 h-4" /> Sign in with {sso.name}
+            </a>
           </>
         )}
         {ssoError && !error && (

@@ -262,17 +262,23 @@ export function onNativeOpen(handler: (path: string) => void) {
   return () => window.removeEventListener('ankibase-open', listener);
 }
 
-/** Single sign-on in the iPhone app: it opens `startUrl` (the server's /api/auth/oidc/start) in
- *  the system's browser sheet, and answers with an `ankibase-sso` event: the one-time code and
- *  the app's secret to trade for a session (auth.ssoAppSession), or an error. */
-export const canSsoInApp = isIOS;
-export function startSso(startUrl: string) {
-  if (isIOS) post({ type: 'sso', url: startUrl });
+/** Logging in to a server, in the iPhone app: the server's own website (its login page,
+ *  password or single sign-on) in the system's sign-in sheet, opened at its app handoff
+ *  (backend/app_login.py). The app answers with an `ankibase-login` event: the one-time code
+ *  and the app's secret to trade for a session (auth.appSession), or an error. */
+export const canLogInWithWebsite = isIOS;
+export function startWebsiteLogin(server: string) {
+  if (isIOS) post({ type: 'login', url: `${server.replace(/\/+$/, '')}/api/auth/app-handoff` });
 }
-export function onNativeSso(handler: (result: { code?: string; verifier?: string; error?: string }) => void) {
+export function onWebsiteLogin(handler: (result: { code?: string; verifier?: string; error?: string }) => void) {
   const listener = (event: Event) => handler((event as CustomEvent).detail ?? {});
-  window.addEventListener('ankibase-sso', listener);
-  return () => window.removeEventListener('ankibase-sso', listener);
+  window.addEventListener('ankibase-login', listener);
+  return () => window.removeEventListener('ankibase-login', listener);
+}
+/** Ask the app's layout to show the login modal (the header's Log in button, a 401). */
+export const OPEN_LOGIN_EVENT = 'ankibase-open-login';
+export function openAppLogin() {
+  window.dispatchEvent(new CustomEvent(OPEN_LOGIN_EVENT));
 }
 
 /** The daily story was turned on: the iPhone app asks to notify when one's ready. */
