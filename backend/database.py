@@ -1423,21 +1423,24 @@ def get_quizlet_daily_counts() -> dict[str, int]:
         return {row[0]: row[1] for row in cursor.fetchall()}
 
 
-def get_quizlet_last_studied() -> dict:
+def get_quizlet_last_studied(exclude: Optional[list[int]] = None) -> dict:
     """The profile's last Quizlet answer (UTC) and its set, or the newest set when it has no
-    answers yet; for the daily Quizlet session reminder. {"has_sets": False} without sets."""
+    answers yet; for the daily Quizlet session reminder. {"has_sets": False} without sets.
+    `exclude`: sets left out (hidden from Study)."""
     active = get_active_account()
     container_id = active["id"] if active else None
+    exclude = [int(x) for x in (exclude or [])]
+    skip = f" AND qd.id NOT IN ({','.join('?' * len(exclude))})" if exclude else ""
     with get_db() as conn:
-        last = conn.execute("""
+        last = conn.execute(f"""
             SELECT qr.reviewed_at, qd.id, qd.title FROM quizlet_reviews qr
             JOIN quizlet_decks qd ON qr.deck_id = qd.id
-            WHERE qd.container_id = ? ORDER BY qr.reviewed_at DESC, qr.id DESC LIMIT 1
-        """, (container_id,)).fetchone()
+            WHERE qd.container_id = ?{skip} ORDER BY qr.reviewed_at DESC, qr.id DESC LIMIT 1
+        """, (container_id, *exclude)).fetchone()
         if last:
             return {"has_sets": True, "at": last[0].replace(" ", "T") + "Z", "set": {"id": last[1], "title": last[2]}}
-        newest = conn.execute("SELECT id, title FROM quizlet_decks WHERE container_id = ? ORDER BY created_at DESC, id DESC LIMIT 1",
-                              (container_id,)).fetchone()
+        newest = conn.execute(f"SELECT id, title FROM quizlet_decks qd WHERE container_id = ?{skip} ORDER BY created_at DESC, id DESC LIMIT 1",
+                              (container_id, *exclude)).fetchone()
         if not newest:
             return {"has_sets": False, "at": None, "set": None}
         return {"has_sets": True, "at": None, "set": {"id": newest[0], "title": newest[1]}}

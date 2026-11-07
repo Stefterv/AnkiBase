@@ -6,6 +6,23 @@ import { AnkiPageModal } from './AnkiPage';
 import { decks, quizlet, type DeckStats, type QuizletDeck } from '../api';
 import { Heatmap } from './Heatmap';
 import { hasServer, useAppStatus } from '../native';
+import { Toggle } from './quizlet/ui';
+import { setShownInStudy, useHiddenFromStudy, type StudyKind } from '../studyShows';
+
+/** "Show in Study", under the name in the rename modals: whether the Study page and its badge
+ *  include it (on this device; studyShows.ts). Saved right away. */
+function ShowInStudy({ kind, id, hidden }: { kind: StudyKind; id: number; hidden: number[] }) {
+  const shown = !hidden.includes(id);
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-lg bg-(--bg-tertiary)/50 px-3 py-2.5 mb-4">
+      <div>
+        <p className="text-sm font-medium">Show in Study</p>
+        <p className="text-xs text-(--text-secondary)">{kind === 'anki' ? 'Its cards due (and its subdecks’) on the Study tab.' : 'In the Study tab’s daily Quizlet session.'}</p>
+      </div>
+      <Toggle on={shown} onChange={v => setShownInStudy(kind, id, v)} />
+    </div>
+  );
+}
 
 interface DeckInfo {
   name: string;
@@ -27,6 +44,7 @@ export function Decks() {
   const [error, setError] = useState('');
   const [currentPath, setCurrentPath] = useState<string[]>([]);
   const [renameModal, setRenameModal] = useState<{ deck: DeckInfo; newName: string } | null>(null);
+  const hiddenFromStudy = useHiddenFromStudy();
   const [optionsDeck, setOptionsDeck] = useState<DeckInfo | null>(null);
   const [deleteModal, setDeleteModal] = useState<DeckInfo | null>(null);
   const [quizletRenameModal, setQuizletRenameModal] = useState<{ deck: QuizletDeck; newName: string } | null>(null);
@@ -492,6 +510,7 @@ export function Decks() {
               autoFocus
               onKeyDown={(e) => e.key === 'Enter' && handleQuizletRename()}
             />
+            <ShowInStudy kind="quizlet" id={quizletRenameModal.deck.id} hidden={hiddenFromStudy.quizlet} />
             <div className="flex gap-2 justify-end">
               <button onClick={() => setQuizletRenameModal(null)} className="btn btn-secondary" disabled={actionLoading}>
                 {t('decks.cancel')}
@@ -548,6 +567,7 @@ export function Decks() {
               autoFocus
               onKeyDown={(e) => e.key === 'Enter' && handleRename()}
             />
+            <ShowInStudy kind="anki" id={renameModal.deck.id} hidden={hiddenFromStudy.anki} />
             <div className="flex gap-2 justify-end">
               <button
                 onClick={() => setRenameModal(null)}

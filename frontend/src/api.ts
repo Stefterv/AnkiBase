@@ -842,8 +842,9 @@ export type QuizletStateMode = 'match' | 'blast' | 'blocks';
 
 export const quizlet = {
   /** When a set was last studied (UTC), and which; the newest set before any. */
-  lastStudied: () =>
-    fetchAPI<{ has_sets: boolean; at: string | null; set: { id: number; title: string } | null }>('/quizlet/last-studied'),
+  lastStudied: (exclude: number[] = []) =>
+    fetchAPI<{ has_sets: boolean; at: string | null; set: { id: number; title: string } | null }>(
+      `/quizlet/last-studied${exclude.length ? `?exclude=${exclude.join(',')}` : ''}`),
   scrape: (url: string) =>
     fetchAPI<{ title: string; cards: { front: string; back: string; image?: string | null }[] }>('/quizlet/scrape', {
       method: 'POST',

@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  ArrowLeft, BookOpen, Check, CheckCircle2, Languages, Loader2, MoreHorizontal, Pause, Pencil, Play, Plus, Search as SearchIcon,
+  ArrowLeft, BookOpen, Check, CheckCircle2, Eye, EyeOff, Languages, Loader2, MoreHorizontal, Pause, Pencil, Play, Plus, Search as SearchIcon,
   Sparkles, Trash2, Volume2, Wand2, X,
 } from 'lucide-react';
 import {
@@ -10,6 +10,7 @@ import {
   type DictionaryResult, type SavedStory, type StoryUnit, type StudySession, type WordData,
 } from '../api';
 import { useSessionSaver } from '../hooks/useSessionSaver';
+import { setShownInStudy, useHiddenFromStudy } from '../studyShows';
 import { haptic } from '../native';
 import { Segmented } from './quizlet/ui';
 import { AddCardDialog } from './AddCardDialog';
@@ -65,6 +66,7 @@ function Library({ onOpen }: { onOpen: (id: number) => void }) {
   const [menu, setMenu] = useState<number | null>(null);
   const [renaming, setRenaming] = useState<{ id: number; name: string } | null>(null);
   const [deleting, setDeleting] = useState<SavedStory | null>(null);
+  const hiddenFromStudy = useHiddenFromStudy().stories;
 
   useEffect(() => {
     stories.list().then(d => setList(d.stories)).catch(() => setList([]));
@@ -144,8 +146,12 @@ function Library({ onOpen }: { onOpen: (id: number) => void }) {
                       <MoreHorizontal className="w-4 h-4" />
                     </button>
                     {menu === s.id && (
-                      <div className="absolute right-0 top-8 z-20 w-36 rounded-lg bg-(--bg-primary) border border-white/10 shadow-xl p-1 text-sm">
+                      <div className="absolute right-0 top-8 z-20 w-44 rounded-lg bg-(--bg-primary) border border-white/10 shadow-xl p-1 text-sm">
                         <button onClick={() => { setRenaming({ id: s.id, name: s.name }); setMenu(null); }} className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md hover:bg-white/8"><Pencil className="w-3.5 h-3.5" /> Rename</button>
+                        {/* Its reading progress in Study's "Continue where you left off" (this device). */}
+                        <button onClick={() => { setShownInStudy('stories', s.id, hiddenFromStudy.includes(s.id)); setMenu(null); }} className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md hover:bg-white/8">
+                          {hiddenFromStudy.includes(s.id) ? <><Eye className="w-3.5 h-3.5" /> Show in Study</> : <><EyeOff className="w-3.5 h-3.5" /> Hide from Study</>}
+                        </button>
                         <button onClick={() => { setDeleting(s); setMenu(null); }} className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md hover:bg-white/8 text-(--error)"><Trash2 className="w-3.5 h-3.5" /> Delete</button>
                       </div>
                     )}

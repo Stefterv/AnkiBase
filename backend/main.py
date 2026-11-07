@@ -2325,11 +2325,12 @@ async def quizlet_list_decks(_: str = Depends(require_auth)):
 
 
 @app.get("/api/quizlet/last-studied")
-async def quizlet_last_studied(_: str = Depends(require_auth)):
+async def quizlet_last_studied(exclude: str = "", _: str = Depends(require_auth)):
     """When a Quizlet set was last studied (and which): the daily Quizlet session reminder in
-    Study, the badge and the iPhone app's reminders decide "today" in the device's time."""
+    Study, the badge and the iPhone app's reminders decide "today" in the device's time.
+    `exclude`: set ids hidden from Study, comma-separated."""
     from database import get_quizlet_last_studied
-    return get_quizlet_last_studied()
+    return get_quizlet_last_studied([int(x) for x in exclude.split(",") if x.strip().isdigit()])
 
 
 @app.get("/api/quizlet/decks/{deck_id}")

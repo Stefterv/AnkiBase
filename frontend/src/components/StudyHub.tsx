@@ -7,6 +7,7 @@ import TestIcon from '../assets/icons/brand-test.svg?react';
 import WriteIcon from '../assets/icons/brand-write.svg?react';
 import { decks, quizlet, stories, studySessions, type DeckStats, type SessionKind, type StudySession } from '../api';
 import { quizletToday, type QuizletToday } from '../quizletToday';
+import { ankiDeckHidden, sessionHidden, useHiddenFromStudy } from '../studyShows';
 
 const KIND: Record<SessionKind, { label: string; Icon: React.ComponentType<React.SVGProps<SVGSVGElement>> }> = {
   'quizlet-learn': { label: 'Learn', Icon: LearnIcon },
@@ -50,6 +51,8 @@ export function StudyHub() {
   const [ankiDecks, setAnkiDecks] = useState<{ name: string; id: number; stats?: DeckStats }[] | null>(null);
   const [now] = useState(() => Date.now());
   const [qzToday, setQzToday] = useState<QuizletToday | null>(null);
+  const hidden = useHiddenFromStudy();
+  const [ankiIds, setAnkiIds] = useState<Record<string, number> | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -62,6 +65,7 @@ export function StudyHub() {
     ]).then(([s, anki, qz, st, today]) => {
       if (cancelled) return;
       setQzToday(today);
+      setAnkiIds(anki?.decks ?? null);
       // Hide sessions whose deck or story no longer exists (when we can tell).
       const quizletIds = qz ? new Set(qz.decks.map(d => String(d.id))) : null;
       const ankiIds = anki ? new Set(Object.values(anki.decks).map(String)) : null;
@@ -101,6 +105,10 @@ export function StudyHub() {
     );
   }
 
+  // Decks, sets and stories hidden from Study ("Show in Study", where they're renamed).
+  const shown = sessions.filter(s => !sessionHidden(s.kind, s.ref_id, ankiIds, hidden));
+  const dueDecks = ankiDecks && ankiIds ? ankiDecks.filter(d => !ankiDeckHidden(d.name, ankiIds, hidden)) : ankiDecks;
+
   return (
     <div className="space-y-8">
       <section className="space-y-3">
@@ -108,7 +116,7 @@ export function StudyHub() {
           <h2 className="text-xl font-bold">Continue where you left off</h2>
           <p className="text-sm text-(--text-secondary)">Anything you started is saved here, even if you leave the app.</p>
         </div>
-        {sessions.length === 0 ? (
+        {shown.length === 0 ? (
           <div className="card text-center py-10 space-y-2">
             <PlayCircle className="w-8 h-8 mx-auto text-(--text-secondary)" />
             <p className="text-sm text-(--text-secondary)">
@@ -118,7 +126,7 @@ export function StudyHub() {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 anim-stagger">
-            {sessions.map(s => {
+            {shown.map(s => {
               const isWrite = s.kind === 'quizlet-learn' && !!s.detail?.startsWith('Write');
               const { label, Icon } = isWrite ? { label: 'Write', Icon: WriteIcon } : KIND[s.kind];
               const pct = s.progress_total > 0 ? Math.min(100, (s.progress_done / s.progress_total) * 100) : 0;
@@ -159,7 +167,7 @@ export function StudyHub() {
       </section>
 
       {/* One Quizlet session a day (counted in the Study badge until it's done). */}
-      {qzToday?.due && qzToday.set && (
+      {qzToday?.due && qzToday.set && !hidden.quizlet.includes(qzToday.set.id) && (
         <section className="space-y-3">
           <h2 className="text-xl font-bold">Today’s Quizlet session</h2>
           <button onClick={() => navigate(`/quizlet/${qzToday.set!.id}/study`)}
@@ -176,17 +184,17 @@ export function StudyHub() {
         </section>
       )}
 
-      {ankiDecks && (
+      {dueDecks && (
         <section className="space-y-3">
           <div className="flex items-baseline justify-between gap-3">
             <h2 className="text-xl font-bold">Due in Anki</h2>
             <Link to="/" className="text-sm text-(--text-secondary) hover-accent">All decks</Link>
           </div>
-          {ankiDecks.length === 0 ? (
+          {dueDecks.length === 0 ? (
             <div className="card text-center py-6 text-sm text-(--text-secondary)">You’re all caught up — no Anki cards due.</div>
           ) : (
             <div className="space-y-2">
-              {ankiDecks.slice(0, 8).map(d => {
+              {dueDecks.slice(0, 8).map(d => {
                 const parts = d.name.split('::');
                 return (
                   <button key={d.id} onClick={() => navigate(`/anki/${d.id}/study`)}
