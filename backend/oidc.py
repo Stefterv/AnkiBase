@@ -52,7 +52,10 @@ class Config:
     # Make a user for provider accounts that aren't linked to one yet (no profiles until an
     # admin gives them some). Off: only users who connected SSO in Settings → Account.
     auto_create: bool = False
-    # The profiles (anki_accounts ids) a user made by auto_create can use straight away.
+    # What a user made by auto_create studies in: "own" (a new profile of their own, starting
+    # with starter_profile's decks, fresh) or "shared" (the existing default_profiles).
+    profile_mode: str = "shared"
+    starter_profile: Optional[int] = None
     default_profiles: list = field(default_factory=list)
     source: str = "settings"  # where it comes from: "settings" (Settings → Users), "env" (.env) or "none"
 
@@ -295,10 +298,15 @@ async def oidc_callback(request: Request, code: str = "", state: str = "", error
         username = _new_username(claims)
         owner = create_user(username, secrets.token_urlsafe(32))  # a password nobody knows…
         set_password_login(owner, False)  # …and password sign-in off for them
-        from database import get_all_accounts, set_user_container_permissions
-        known = {a["id"] for a in get_all_accounts()}
-        set_user_container_permissions(owner, [p for p in get_config().default_profiles if p in known])
         link_oidc_identity(owner, issuer, subject)
+        cfg = get_config()
+        if cfg.profile_mode == "own":
+            import starter_profile
+            await starter_profile.give_own_profile(owner, username, cfg.starter_profile)
+        else:
+            from database import get_all_accounts, set_user_container_permissions
+            known = {a["id"] for a in get_all_accounts()}
+            set_user_container_permissions(owner, [p for p in cfg.default_profiles if p in known])
         print(f"✓ Made user '{username}' for a single sign-on account")
 
     from main import sessions
@@ -343,6 +351,8 @@ class ConfigUpdate(BaseModel):
     redirect_uri: str = ""
     auto_create: bool = False
     default_profiles: list[int] = []
+    profile_mode: str = "shared"
+    starter_profile: Optional[int] = None
 
 
 def _admin_view(cfg: Config, request: Request) -> dict:
@@ -352,7 +362,9 @@ def _admin_view(cfg: Config, request: Request) -> dict:
     from database import get_all_accounts
     data["profiles"] = [{"id": a["id"], "name": a["container_name"]} for a in get_all_accounts()]
     # Profiles deleted since don't count.
-    data["default_profiles"] = [p for p in cfg.default_profiles if any(a["id"] == p for a in data["profiles"])]
+    known = {a["id"] for a in data["profiles"]}
+    data["default_profiles"] = [p for p in cfg.default_profiles if p in known]
+    data["starter_profile"] = cfg.starter_profile if cfg.starter_profile in known else None
     return data
 
 
@@ -377,6 +389,7 @@ async def oidc_config_update(body: ConfigUpdate, request: Request, _: dict = Dep
         name=body.name.strip()[:40] or "SSO", scopes=" ".join(body.scopes.split()) or "openid profile email",
         redirect_uri=body.redirect_uri.strip(), auto_create=body.auto_create,
         default_profiles=sorted(set(body.default_profiles)), source="settings",
+        profile_mode="own" if body.profile_mode == "own" else "shared", starter_profile=body.starter_profile,
     )
     if cfg.issuer and not re.match(r"^https?://", cfg.issuer):
         raise HTTPException(status_code=400, detail="The issuer is a URL, like https://auth.example.com/application/o/ankibase/")

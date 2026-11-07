@@ -124,6 +124,8 @@ export interface OidcConfig {
   redirect_uri: string; auto_create: boolean; source: 'settings' | 'env' | 'none'; default_redirect_uri: string;
   /** Profiles users made by auto-create get; `profiles` lists them all. */
   default_profiles: number[]; profiles: { id: number; name: string }[];
+  /** 'own': each new user gets a profile of their own, starting with starter_profile's decks (fresh). */
+  profile_mode: 'own' | 'shared'; starter_profile: number | null;
 }
 export type OidcConfigUpdate = Omit<OidcConfig, 'has_secret' | 'source' | 'default_redirect_uri' | 'profiles'> & { client_secret?: string | null };
 
