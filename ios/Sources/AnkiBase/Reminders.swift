@@ -2,7 +2,8 @@ import UIKit
 import UserNotifications
 
 /// Settings → Reminders: a daily notification naming the decks that are behind (reviews,
-/// learning or new cards to study), and the app icon's badge: 1 while anything is behind (the count of
+/// learning or new cards to study) and the day's Quizlet session until one's done, and the
+/// app icon's badge: 1 while anything is waiting (the count of
 /// cards due is on the Study tab).
 ///
 /// iOS doesn't wake the app to count, so whenever the app goes to the background or a sync
@@ -86,7 +87,13 @@ final class Reminders {
             return
         }
         guard let days = behind(), let today = days.first else { return }
-        center.setBadgeCount(today.decks.isEmpty ? 0 : 1, withCompletionHandler: nil)
+        // One Quizlet session a day: named with the decks, today until a set was studied.
+        let quizlet = quizletSession()
+        let waiting = { (index: Int) -> [String] in
+            guard let quizlet, index > 0 || !quizlet.studiedToday else { return days[index].decks }
+            return days[index].decks + [quizlet.title]
+        }
+        center.setBadgeCount(waiting(0).isEmpty ? 0 : 1, withCompletionHandler: nil)
 
         // A reminder at the chosen time on each of the coming days, with the decks behind on
         // the Anki day it falls in (they start at the day rollover, 4am by default).
@@ -98,10 +105,10 @@ final class Reminders {
                   let fire = calendar.date(bySettingHour: settings.hour, minute: settings.minute, second: 0, of: date),
                   fire > now else { continue }
             let index = Int(((fire.timeIntervalSince1970 - Double(today.starts)) / 86_400).rounded(.down))
-            guard days.indices.contains(index), !days[index].decks.isEmpty else { continue }
+            guard days.indices.contains(index), !waiting(index).isEmpty else { continue }
             let content = UNMutableNotificationContent()
             content.title = text("title", "Time to study")
-            content.body = body(days[index].decks)
+            content.body = body(waiting(index))
             content.badge = 1
             content.sound = .default
             let when = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: fire)
@@ -136,12 +143,31 @@ final class Reminders {
 
     /// The engine's prediction, asked the way the web view asks it.
     private func behind() -> [Day]? {
+        struct Answer: Decodable { let days: [Day] }
+        return get("/api/app/behind").flatMap { try? JSONDecoder().decode(Answer.self, from: $0) }?.days
+    }
+
+    /// The daily Quizlet session (the server's, or its last answer kept for offline): the set
+    /// studied last, and whether one was studied today. Nil without a server or sets.
+    private func quizletSession() -> (title: String, studiedToday: Bool)? {
+        struct Answer: Decodable {
+            struct QuizletSet: Decodable { let title: String }
+            let has_sets: Bool
+            let at: String?
+            let set: QuizletSet?
+        }
+        guard let data = get("/api/quizlet/last-studied"),
+              let answer = try? JSONDecoder().decode(Answer.self, from: data),
+              answer.has_sets, let set = answer.set else { return nil }
+        let last = answer.at.flatMap { ISO8601DateFormatter().date(from: $0) }
+        return (set.title, last.map { Calendar.current.isDateInToday($0) } ?? false)
+    }
+
+    private func get(_ target: String) -> Data? {
         var status = 0
         var body = Data()
         let reply = Core.Reply(onHead: { code, _ in status = code }, onData: { data in body.append(data); return true })
-        Core.handle(method: "GET", target: "/api/app/behind", headers: [:], body: Data(), reply: reply)
-        guard status == 200 else { return nil }
-        struct Answer: Decodable { let days: [Day] }
-        return (try? JSONDecoder().decode(Answer.self, from: body))?.days
+        Core.handle(method: "GET", target: target, headers: [:], body: Data(), reply: reply)
+        return status == 200 ? body : nil
     }
 }

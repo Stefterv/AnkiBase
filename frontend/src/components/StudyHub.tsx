@@ -6,6 +6,7 @@ import LearnIcon from '../assets/icons/brand-learn.svg?react';
 import TestIcon from '../assets/icons/brand-test.svg?react';
 import WriteIcon from '../assets/icons/brand-write.svg?react';
 import { decks, quizlet, stories, studySessions, type DeckStats, type SessionKind, type StudySession } from '../api';
+import { quizletToday, type QuizletToday } from '../quizletToday';
 
 const KIND: Record<SessionKind, { label: string; Icon: React.ComponentType<React.SVGProps<SVGSVGElement>> }> = {
   'quizlet-learn': { label: 'Learn', Icon: LearnIcon },
@@ -48,6 +49,7 @@ export function StudyHub() {
   const [sessions, setSessions] = useState<StudySession[]>([]);
   const [ankiDecks, setAnkiDecks] = useState<{ name: string; id: number; stats?: DeckStats }[] | null>(null);
   const [now] = useState(() => Date.now());
+  const [qzToday, setQzToday] = useState<QuizletToday | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -56,8 +58,10 @@ export function StudyHub() {
       decks.list().catch(() => null), // the Anki engine may still be starting
       quizlet.listDecks().catch(() => null),
       stories.list(100).catch(() => null),
-    ]).then(([s, anki, qz, st]) => {
+      quizletToday(),
+    ]).then(([s, anki, qz, st, today]) => {
       if (cancelled) return;
+      setQzToday(today);
       // Hide sessions whose deck or story no longer exists (when we can tell).
       const quizletIds = qz ? new Set(qz.decks.map(d => String(d.id))) : null;
       const ankiIds = anki ? new Set(Object.values(anki.decks).map(String)) : null;
@@ -153,6 +157,24 @@ export function StudyHub() {
           </div>
         )}
       </section>
+
+      {/* One Quizlet session a day (counted in the Study badge until it's done). */}
+      {qzToday?.due && qzToday.set && (
+        <section className="space-y-3">
+          <h2 className="text-xl font-bold">Today’s Quizlet session</h2>
+          <button onClick={() => navigate(`/quizlet/${qzToday.set!.id}/study`)}
+            className="w-full rounded-xl bg-(--bg-secondary) hover:bg-(--bg-tertiary) transition-colors px-4 py-3 flex items-center gap-4 text-left">
+            <div className="w-9 h-9 rounded-lg bg-(--accent)/10 flex items-center justify-center shrink-0">
+              <LearnIcon className="w-5 h-5" style={{ color: 'var(--accent)' }} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="font-medium truncate">{qzToday.set.title}</p>
+              <p className="text-xs text-(--text-secondary)">You haven’t studied a Quizlet set today — one session keeps the words fresh.</p>
+            </div>
+            <ArrowRight className="w-4 h-4 text-(--text-secondary) shrink-0" />
+          </button>
+        </section>
+      )}
 
       {ankiDecks && (
         <section className="space-y-3">
