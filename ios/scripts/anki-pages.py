@@ -71,15 +71,29 @@ BRIDGE_JS = """\
 """
 
 
+def download(url: str, timeout: float, tries: int = 4) -> bytes:
+    """A URL's contents, trying again when the connection drops (it does, on CI machines)."""
+    import http.client
+    import time
+    for attempt in range(1, tries + 1):
+        try:
+            with urllib.request.urlopen(url, timeout=timeout) as response:
+                return response.read()
+        except (OSError, http.client.HTTPException) as error:
+            if attempt == tries:
+                raise
+            print(f"Download failed ({error}), trying again ({attempt}/{tries - 1})…", file=sys.stderr)
+            time.sleep(2 * attempt)
+
+
 def wheel_bytes() -> bytes:
-    with urllib.request.urlopen(f"https://pypi.org/pypi/aqt/{ANKI_VERSION}/json", timeout=60) as response:
-        release = json.load(response)
+    release = json.loads(download(f"https://pypi.org/pypi/aqt/{ANKI_VERSION}/json", timeout=60))
     wheel = next(f for f in release["urls"] if f["packagetype"] == "bdist_wheel")
-    with urllib.request.urlopen(wheel["url"], timeout=300) as response:
-        data = response.read()
-    if hashlib.sha256(data).hexdigest() != wheel["digests"]["sha256"]:
-        sys.exit("The aqt wheel doesn't match PyPI's checksum")
-    return data
+    for attempt in range(2):
+        data = download(wheel["url"], timeout=300)
+        if hashlib.sha256(data).hexdigest() == wheel["digests"]["sha256"]:
+            return data
+    sys.exit("The aqt wheel doesn't match PyPI's checksum")
 
 
 def main():
