@@ -256,7 +256,7 @@ fn decks_behind_for_the_badge_and_reminders() {
             .unwrap_or_else(|_| panic!("no engine"));
     };
     // A subdeck's review today makes its top-level deck behind; Kanji falls behind in 3
-    // days; French only has new cards, which isn't being behind.
+    // days; French only has new cards, which counts too (there's something to study today).
     due_in("ser", "0");
     due_in("水", "3");
 
@@ -264,10 +264,10 @@ fn decks_behind_for_the_badge_and_reminders() {
     let days = behind["days"].as_array().unwrap();
     assert_eq!(days.len(), 7);
     let decks = |day: usize| days[day]["decks"].clone();
-    assert_eq!(decks(0), json!(["Spanish"]));
-    assert_eq!(decks(2), json!(["Spanish"]));
-    assert_eq!(decks(3), json!(["Kanji", "Spanish"]));
-    assert_eq!(decks(6), json!(["Kanji", "Spanish"]));
+    assert_eq!(decks(0), json!(["French", "Spanish"]));
+    assert_eq!(decks(2), json!(["French", "Spanish"]));
+    assert_eq!(decks(3), json!(["French", "Kanji", "Spanish"]));
+    assert_eq!(decks(6), json!(["French", "Kanji", "Spanish"]));
     // Each day starts at a rollover, a day after the one before; today's has passed.
     let starts: Vec<i64> = days.iter().map(|d| d["starts"].as_i64().unwrap()).collect();
     assert!(starts.windows(2).all(|w| w[1] - w[0] == 86_400));

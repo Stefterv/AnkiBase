@@ -1,8 +1,8 @@
 import UIKit
 import UserNotifications
 
-/// Settings → Reminders: a daily notification naming the decks that are behind (reviews or
-/// learning cards due), and the app icon's badge: 1 while anything is behind (the count of
+/// Settings → Reminders: a daily notification naming the decks that are behind (reviews,
+/// learning or new cards to study), and the app icon's badge: 1 while anything is behind (the count of
 /// cards due is on the Study tab).
 ///
 /// iOS doesn't wake the app to count, so whenever the app goes to the background or a sync

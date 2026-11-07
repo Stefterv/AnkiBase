@@ -8,7 +8,7 @@ use anki::collection::CollectionBuilder;
 use anki::error::{SyncErrorKind, AnkiError};
 use anki::prelude::*;
 use anki::scheduler::answering::{CardAnswer, Rating};
-use anki::search::{JoinSearches, PropertyKind, SearchNode, SortMode};
+use anki::search::{JoinSearches, PropertyKind, SearchNode, SortMode, StateKind};
 use anki::sync::collection::normal::SyncActionRequired;
 use anki::sync::login::{sync_login, SyncAuth};
 use anki_proto::decks::DeckTreeNode;
@@ -157,17 +157,30 @@ impl Engine {
     pub fn behind(&mut self, days: u32) -> Outcome<Value> {
         let col = self.col()?;
         let next_day_at = col.timing_today()?.next_day_at.0;
-        let tree = col.deck_tree(None)?;
-        // The first day each deck is behind on: a deck stays behind until it's studied.
+        // With today's counts (new cards left within the daily limit).
+        let tree = col.deck_tree(Some(TimestampSecs::now()))?;
+        // The first day each deck is behind on: a deck stays behind until it's studied. New
+        // cards count too (they have no due date): today when today's limit has some left,
+        // else tomorrow when the deck has new cards at all.
         let mut first = Vec::new();
         for deck in &tree.children {
+            let in_deck = || SearchNode::DeckIdWithChildren(DeckId(deck.deck_id));
+            let mut behind_on = None;
             for day in 0..days {
-                let due = SearchNode::DeckIdWithChildren(DeckId(deck.deck_id))
-                    .and(SearchNode::Property { operator: "<=".into(), kind: PropertyKind::Due(day as i32) });
+                let due = in_deck().and(SearchNode::Property { operator: "<=".into(), kind: PropertyKind::Due(day as i32) });
                 if !col.search_cards(due, SortMode::NoOrder)?.is_empty() {
-                    first.push((deck.name.clone(), day));
+                    behind_on = Some(day);
                     break;
                 }
+            }
+            if deck.new_count > 0 {
+                behind_on = Some(0);
+            } else if behind_on.is_none_or(|d| d > 1) && days > 1
+                && !col.search_cards(in_deck().and(SearchNode::State(StateKind::New)), SortMode::NoOrder)?.is_empty() {
+                behind_on = Some(1);
+            }
+            if let Some(day) = behind_on {
+                first.push((deck.name.clone(), day));
             }
         }
         let days: Vec<Value> = (0..days)

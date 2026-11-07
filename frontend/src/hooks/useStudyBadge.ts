@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { decks } from '../api';
 
-/** How many cards are due (reviews and learning cards, as Anki counts "due"; new cards
- *  aren't): the Study tab's badge, in the browser and the apps. The top-level decks' counts
- *  include their subdecks'. (The iPhone app's icon just shows 1 while anything is due.) */
+/** How many cards there are to study today (new within the daily limit, learning and
+ *  reviews, as the decks show them): the Study tab's badge, in the browser and the apps. The
+ *  top-level decks' counts include their subdecks'. (The iPhone app's icon just shows 1.) */
 async function countDue(): Promise<number> {
   const data = await decks.list();
   return Object.entries(data.decks).reduce((sum, [name, id]) => {
     const stats = data.stats[id];
-    return name.includes('::') || !stats ? sum : sum + stats.review_count + stats.learn_count;
+    return name.includes('::') || !stats ? sum : sum + stats.new_count + stats.learn_count + stats.review_count;
   }, 0);
 }
 

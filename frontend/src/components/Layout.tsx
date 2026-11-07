@@ -134,7 +134,7 @@ export function Layout() {
   const mobileNavItems = navItems.slice(0, 5);
   const mobileMoreItems = navItems.slice(5);
 
-  // The cards due, on the Study tab (in the iPhone app's tab bar too).
+  // The cards to study today (new, learning, reviews), on the Study tab (in the iPhone app's tab bar too).
   const dueCards = useStudyBadge(onStudyPath);
   const badgeFor = (to: string) => (to === '/study' && dueCards > 0 ? (dueCards > 999 ? '999+' : String(dueCards)) : null);
 
