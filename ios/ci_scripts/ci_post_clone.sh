@@ -26,6 +26,8 @@ echo "== local.env"
   for name in ANKIBASE_BUNDLE_ID ANKIBASE_TEAM_ID ANKIBASE_SERVER ANKIBASE_UPDATE_FEED; do
     [ -z "${!name:-}" ] || printf '%s=%q\n' "$name" "${!name}"
   done
+  # Xcode Cloud numbers its builds itself; the app's build number (CFBundleVersion) follows.
+  [ -z "${CI_BUILD_NUMBER:-}" ] || echo "ANKIBASE_BUILD_NUMBER=$CI_BUILD_NUMBER"
 } > local.env
 cat local.env
 
