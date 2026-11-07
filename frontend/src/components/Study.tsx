@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, Undo2, Volume2, PartyPopper, Loader2, AlertTriangle } from 'lucide-react';
 import { decks, review, type ReviewCard, type ReviewState } from '../api';
 import { useSessionSaver } from '../hooks/useSessionSaver';
+import { syncAfterAnswer } from '../sync';
 import { StudyHub } from './StudyHub';
 import { CardFrame } from './study/CardFrame';
 import { mediaUrl } from './study/media';
@@ -98,6 +99,7 @@ function Reviewer({ deckId }: { deckId: number }) {
     stopAudio();
     try {
       const next = await review.answer(deck, card.card_id, ease);
+      syncAfterAnswer();  // once the answers pause (sync.ts)
       setReviewed(n => n + 1);
       setState(next);
       setRevealed(false);

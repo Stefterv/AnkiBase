@@ -159,6 +159,8 @@ async def startup_event():
     app.state.anki_engine = asyncio.create_task(asyncio.to_thread(_start_anki_engine_safely))
     import daily_story
     app.state.daily_story = asyncio.create_task(daily_story.loop())
+    import auto_sync  # the profiles sync by themselves every few minutes
+    app.state.auto_sync = asyncio.create_task(auto_sync.loop())
     try:
         # Upgrading from the single-password versions: that password becomes root's.
         if get_all_accounts():

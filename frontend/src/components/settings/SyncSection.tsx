@@ -243,17 +243,18 @@ export function SyncSection({ admin = false }: { admin?: boolean }) {
 
       {admin && <SyncServerCard onUse={useServer} />}
 
-      {isNative && (
-        <section className="card">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <h3 className="font-semibold">Sync automatically</h3>
-              <p className="text-xs text-(--text-secondary) mt-0.5">When the app opens and when you leave it, like Anki on phones.</p>
-            </div>
-            <Toggle on={auto} onChange={v => { setAuto(v); setAutoSync(v); }} />
+      <section className="card">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h3 className="font-semibold">Sync automatically</h3>
+            <p className="text-xs text-(--text-secondary) mt-0.5">
+              {isNative ? 'When the app opens and when you leave it, like Anki on phones,' : 'When you open AnkiBase,'} and while you study,
+              shortly after your answers pause.
+            </p>
           </div>
-        </section>
-      )}
+          <Toggle on={auto} onChange={v => { setAuto(v); setAutoSync(v); }} />
+        </div>
+      </section>
 
       {status?.configured && (
         <section className="card space-y-3">

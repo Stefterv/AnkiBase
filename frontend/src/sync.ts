@@ -1,5 +1,7 @@
 /** Syncing the Anki collection: one sync at a time, shared by the header's Sync button,
- *  Settings → Sync and (in the app) automatic syncs when the app opens and closes. */
+ *  Settings → Sync and automatic syncs: when the app or page opens and closes, and while
+ *  studying, shortly after the answers pause. (The server also syncs every profile by
+ *  itself every few minutes, backend/auto_sync.py.) */
 import { useEffect, useState } from 'react';
 import { ankiweb, sync } from './api';
 import { isNative } from './native';
@@ -61,16 +63,19 @@ export function useSyncState(): SyncState {
   return value;
 }
 
-// --- Automatic syncs (the app) -----------------------------------------------------------
+// --- Automatic syncs -----------------------------------------------------------------------
 
 const AUTO_KEY = 'ankibase-auto-sync';
 const LAST_AUTO = 'ankibase-last-sync';
 /** Coming back to the app syncs again only after this long; leaving it, after this long. */
 const OPEN_GAP_MS = 5 * 60 * 1000;
 const CLOSE_GAP_MS = 60 * 1000;
+/** While studying: a sync this long after the last answer, at most once per STUDY_GAP_MS. */
+const AFTER_ANSWER_MS = 15 * 1000;
+const STUDY_GAP_MS = 60 * 1000;
 
 export function autoSyncEnabled(): boolean {
-  return isNative && localStorage.getItem(AUTO_KEY) !== 'off';
+  try { return localStorage.getItem(AUTO_KEY) !== 'off'; } catch { return true; }
 }
 
 export function setAutoSync(on: boolean) {
@@ -92,12 +97,21 @@ async function autoSync(gap: number) {
   if (configured) runSync({ quiet: true });
 }
 
-/** Like Anki on phones: sync when the app opens, comes back after a while, or goes to the
- *  background (the app keeps running briefly to finish). */
+let afterAnswer: ReturnType<typeof setTimeout> | undefined;
+/** An answer was saved: sync once the answers pause (AFTER_ANSWER_MS), not more than once a
+ *  minute. A sync of a few reviews is one or two small requests; waiting for a pause keeps it
+ *  from holding up the next answer (the collection waits while it syncs). */
+export function syncAfterAnswer() {
+  clearTimeout(afterAnswer);
+  afterAnswer = setTimeout(() => { autoSync(STUDY_GAP_MS); }, AFTER_ANSWER_MS);
+}
+
+/** Like Anki on phones: sync when the app (or the page) opens, comes back after a while, or
+ *  goes to the background (the app keeps running briefly to finish). */
 export function useAutoSync() {
   useEffect(() => {
-    if (!isNative) return;
-    autoSync(0);
+    // The app syncs whenever it starts; a browser tab not on every reload.
+    autoSync(isNative ? 0 : OPEN_GAP_MS);
     const onVisibility = () => autoSync(document.visibilityState === 'hidden' ? CLOSE_GAP_MS : OPEN_GAP_MS);
     document.addEventListener('visibilitychange', onVisibility);
     return () => document.removeEventListener('visibilitychange', onVisibility);
