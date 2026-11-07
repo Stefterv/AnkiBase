@@ -2169,6 +2169,14 @@ async def syncserver_proxy(path: str, request: Request):
         raise HTTPException(status_code=502, detail="The sync server isn't running")
     passed = {k: v for k, v in upstream.headers.items()
               if k.lower() not in ("content-length", "transfer-encoding", "connection")}
+    # Anki streams its own (zstd) data and its clients give up when a stream stalls. A reverse
+    # proxy's compression holds the stream back to compress it (Coolify turns Traefik's gzip on
+    # by default: media sync then fails with "stream failure (code=303)"). Traefik and Caddy
+    # leave responses that already have a Content-Encoding alone; nginx stops buffering on
+    # X-Accel-Buffering: no.
+    passed.setdefault("content-encoding", "identity")
+    passed["cache-control"] = "no-transform" + (", " + passed["cache-control"] if passed.get("cache-control") else "")
+    passed["x-accel-buffering"] = "no"
     return StreamingResponse(upstream.aiter_raw(), status_code=upstream.status_code, headers=passed,
                              background=BackgroundTask(_close_both, upstream, client))
 
