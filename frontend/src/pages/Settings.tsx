@@ -12,13 +12,14 @@ import { RemindersSection } from '../components/settings/RemindersSection';
 import { DailyStorySection } from '../components/settings/DailyStorySection';
 import { SsoSection } from '../components/settings/SsoSection';
 import { SsoAdminSection } from '../components/settings/SsoAdminSection';
-import { canRemind, device, hasServer, isNative, useAppStatus } from '../native';
+import { canRemind, device, hasServer, isNative, luminance, useAppStatus } from '../native';
 import { LANGUAGES } from '../i18n';
 import { Logo } from '../components/Logo';
 import { useTranslation } from 'react-i18next';
 import {
   ACCENT_PRESETS, saveAccentColor, applyBaseColors,
   BASE_COLORS_DEFAULT, saveBaseColors, type BaseColors,
+  getAutoTheme, setAutoTheme, type AutoTheme,
 } from '../hooks/useAccentColor';
 
 type ThemeMode = 'personal' | 'server';
@@ -274,6 +275,10 @@ export function Settings() {
 
   // Shared mode toggle
   const [mode, setMode] = useState<ThemeMode>('personal');
+  // "Match system": a light and a dark theme, switched with the system's appearance (this device).
+  const [autoTheme, setAutoThemeState] = useState<AutoTheme | null>(getAutoTheme);
+  const changeAutoTheme = (next: AutoTheme | null) => { setAutoTheme(next); setAutoThemeState(next); };
+  const stopAutoTheme = () => { if (autoTheme) changeAutoTheme(null); };
 
   // Custom themes (localStorage)
   const [customThemes, setCustomThemes] = useState<ThemeEntry[]>(loadCustomThemes);
@@ -305,6 +310,7 @@ export function Settings() {
   // ── Accent ───────────────────────────────────────────────────────────────────
 
   const handleSavePersonalAccent = async (accent: string, hover?: string) => {
+    stopAutoTheme();  // picked by hand: one theme again
     const h = hover ?? serverHover;
     setAccentColor(accent);
     saveAccentColor(accent, h);
@@ -337,6 +343,7 @@ export function Settings() {
   // ── Base Colors ──────────────────────────────────────────────────────────────
 
   const handleSavePersonalBase = async (colors: BaseColors) => {
+    stopAutoTheme();
     setPersonalBase(colors);
     saveBaseColors(colors);
     setBaseColorsSaving(true);
@@ -596,6 +603,40 @@ export function Settings() {
                   <input ref={fileInputRef} type="file" accept=".json" className="hidden" onChange={handleImportFile} />
                 </div>
               </div>
+              {!isServer && (() => {
+                const all = [...BUILTIN_THEMES, ...customThemes];
+                const isLight = (th: ThemeEntry) => luminance(th.base.bg_primary) >= 0.5;
+                const pick = (slot: 'light' | 'dark') => (
+                  <label className="flex items-center gap-2 text-sm">
+                    <span className="w-10 text-(--text-secondary)">{slot === 'light' ? 'Light' : 'Dark'}</span>
+                    <select value={autoTheme?.[slot].name ?? ''} className="input !py-1 text-sm"
+                      onChange={e => {
+                        const th = all.find(x => x.name === e.target.value);
+                        if (th && autoTheme) changeAutoTheme({ ...autoTheme, [slot]: th });
+                      }}>
+                      {[...all].sort((a, b) => Number(isLight(b) === (slot === 'light')) - Number(isLight(a) === (slot === 'light')))
+                        .map(th => <option key={th.name} value={th.name}>{th.name}</option>)}
+                    </select>
+                  </label>
+                );
+                return (
+                  <div className="space-y-3">
+                    <Segmented value={autoTheme ? 'auto' : 'one'}
+                      onChange={v => changeAutoTheme(v === 'auto' ? {
+                        light: all.find(isLight) ?? BUILTIN_THEMES[0],
+                        dark: all.find(th => isThemeActive(th) && !isLight(th)) ?? BUILTIN_THEMES[0],
+                      } : null)}
+                      options={[{ value: 'one', label: 'One theme' }, { value: 'auto', label: 'Match system' }]} />
+                    {autoTheme && (
+                      <div className="flex flex-wrap gap-x-6 gap-y-2">
+                        {pick('light')}
+                        {pick('dark')}
+                        <p className="w-full text-xs text-(--text-secondary)">Switches with your device’s light and dark mode. Picking a theme below goes back to one theme.</p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
               <div className="flex flex-wrap gap-4">
                 {BUILTIN_THEMES.map(th => <ThemeCard key={th.name} th={th} />)}
                 {customThemes.map((th, i) => <ThemeCard key={`custom-${i}`} th={th} customIndex={i} />)}

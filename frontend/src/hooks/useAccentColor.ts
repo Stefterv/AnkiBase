@@ -1,4 +1,4 @@
-import { syncNativeTheme } from '../native';
+import { iconFor, setNativeIconOverride, syncNativeTheme } from '../native';
 
 const STORAGE_KEY = 'ankibase-accent';
 const BASE_COLORS_KEY = 'ankibase-base-colors';
@@ -45,7 +45,7 @@ export function loadAccentColor() {
 export function saveAccentColor(accent: string, hover?: string) {
   const h = hover ?? lighten(accent);
   localStorage.setItem(STORAGE_KEY, JSON.stringify({ accent, hover: h }));
-  applyAccentColor(accent, h);
+  if (!applyAutoTheme()) applyAccentColor(accent, h);
 }
 
 export function getAccentColor(): { accent: string; hover: string } {
@@ -89,7 +89,7 @@ export function applyBaseColors(colors: Partial<BaseColors>) {
 export function saveBaseColors(colors: Partial<BaseColors>) {
   const c = { ...BASE_COLORS_DEFAULT, ...colors };
   localStorage.setItem(BASE_COLORS_KEY, JSON.stringify(c));
-  applyBaseColors(c);
+  if (!applyAutoTheme()) applyBaseColors(c);
 }
 
 export function loadBaseColors() {
@@ -97,6 +97,54 @@ export function loadBaseColors() {
     const saved = localStorage.getItem(BASE_COLORS_KEY);
     if (saved) applyBaseColors(JSON.parse(saved));
   } catch {}
+}
+
+// --- Following the system's light and dark mode ------------------------------------------
+
+/** A theme to switch to: its accent and colours. */
+export interface ThemeColors { name: string; accent: string; hover: string; base: BaseColors }
+/** "Match system": the theme for light mode and the one for dark mode (this device). While it's
+ *  set, the saved colours above stay saved but aren't shown. */
+export interface AutoTheme { light: ThemeColors; dark: ThemeColors }
+
+const AUTO_KEY = 'ankibase-theme-auto';
+const darkMode = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+
+export function getAutoTheme(): AutoTheme | null {
+  try {
+    const saved = localStorage.getItem(AUTO_KEY);
+    return saved ? JSON.parse(saved) : null;
+  } catch { return null; }
+}
+
+/** Show the light or dark theme, as the system is now; false when not following the system. */
+export function applyAutoTheme(): boolean {
+  const auto = getAutoTheme();
+  if (!auto) return false;
+  const theme = (darkMode?.matches ?? true) ? auto.dark : auto.light;
+  // One home screen icon (the dark theme's) rather than a new one at every switch.
+  setNativeIconOverride(iconFor(auto.dark.accent, auto.dark.base.bg_secondary));
+  applyAccentColor(theme.accent, theme.hover);
+  applyBaseColors(theme.base);
+  return true;
+}
+
+/** Follow the system with these themes, or (null) go back to the saved colours. */
+export function setAutoTheme(auto: AutoTheme | null) {
+  try {
+    if (auto) localStorage.setItem(AUTO_KEY, JSON.stringify(auto));
+    else localStorage.removeItem(AUTO_KEY);
+  } catch { /* storage unavailable */ }
+  if (applyAutoTheme()) return;
+  setNativeIconOverride(null);
+  applyAccentColor(getAccentColor().accent, getAccentColor().hover);
+  loadBaseColors();
+}
+
+/** At start: the system's theme now, and again whenever it changes (sunset, Control Center). */
+export function initAutoTheme() {
+  applyAutoTheme();
+  darkMode?.addEventListener('change', () => applyAutoTheme());
 }
 
 export const ACCENT_PRESETS = [

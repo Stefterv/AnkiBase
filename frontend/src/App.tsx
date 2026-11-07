@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { auth, setup } from './api';
-import { loadAccentColor, saveAccentColor, loadBaseColors, saveBaseColors } from './hooks/useAccentColor';
+import { loadAccentColor, saveAccentColor, loadBaseColors, saveBaseColors, initAutoTheme } from './hooks/useAccentColor';
 
 loadAccentColor();
 loadBaseColors();
+initAutoTheme();  // Settings → Appearance → Match system
 import { Logo } from './components/Logo';
 import { Login } from './components/Login';
 import { canLogInWithWebsite } from './native';

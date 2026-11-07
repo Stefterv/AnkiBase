@@ -83,6 +83,14 @@ let themeTimer: ReturnType<typeof setTimeout> | undefined;
 
 /** Tell the app the current colours: the status bar, the area behind the page and the
  *  home screen icon follow the theme. Debounced, so dragging a colour picker is cheap. */
+/** The home screen icon to keep, whatever the colours (while the theme follows the system:
+ *  iOS asks about every icon change, so it shouldn't change at sunset). */
+let iconOverride: string | null = null;
+export function setNativeIconOverride(icon: string | null) {
+  iconOverride = icon;
+  syncNativeTheme();
+}
+
 export function syncNativeTheme() {
   if (!isNative) return;
   clearTimeout(themeTimer);
@@ -90,7 +98,7 @@ export function syncNativeTheme() {
     const accent = cssVar('--accent') || '#e94560';
     const bar = cssVar('--bg-secondary') || '#16213e';
     const page = cssVar('--bg-primary') || '#1a1a2e';
-    const message = { type: 'theme', accent, bar, page, dark: luminance(bar) < 0.5, icon: iconFor(accent, bar) };
+    const message = { type: 'theme', accent, bar, page, dark: luminance(bar) < 0.5, icon: iconOverride ?? iconFor(accent, bar) };
     const key = JSON.stringify(message);
     if (key === lastTheme) return;
     lastTheme = key;
