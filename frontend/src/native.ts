@@ -90,11 +90,16 @@ export function systemPrefersDark(): boolean {
   if (appDark !== undefined) return appDark;
   return typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-color-scheme: dark)').matches;
 }
-export function onSystemAppearance(handler: () => void) {
+/** Calls the handler whenever the device's light or dark mode changes; returns a function that stops it. */
+export function onSystemAppearance(handler: () => void): () => void {
   const media = typeof window !== 'undefined' ? window.matchMedia?.('(prefers-color-scheme: dark)') : null;
   const fromApp = (event: Event) => { appDark = !!(event as CustomEvent<{ dark: boolean }>).detail?.dark; handler(); };
-  if (appDark !== undefined) window.addEventListener('ankibase-appearance', fromApp);
-  else media?.addEventListener('change', handler);
+  if (appDark !== undefined) {
+    window.addEventListener('ankibase-appearance', fromApp);
+    return () => window.removeEventListener('ankibase-appearance', fromApp);
+  }
+  media?.addEventListener('change', handler);
+  return () => media?.removeEventListener('change', handler);
 }
 
 /** The home screen icon to keep, whatever the colours (while the theme follows the system:

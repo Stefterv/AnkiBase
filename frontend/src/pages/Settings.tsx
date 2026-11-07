@@ -1,6 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useRef } from 'react';
-import { Globe, Palette, RotateCcw, X, Download, Upload, Trash2, Sparkles, Users, User as UserIcon, Check, ChevronRight, RefreshCw, Server, Bell } from 'lucide-react';
-import { Segmented } from '../components/quizlet/ui';
+import { Globe, Palette, RotateCcw, X, Download, Upload, Trash2, Sparkles, Users, User as UserIcon, Check, ChevronRight, RefreshCw, Server, Bell, Sun, Moon, SunMoon } from 'lucide-react';
+import { Segmented, Toggle } from '../components/quizlet/ui';
 import { AiPanel, type AiChoice } from '../components/story/AiPanel';
 import { useSpring } from '../hooks/useSpring';
 import { auth, theme as themeApi, settings as settingsApi, type User, type ProviderInfo } from '../api';
@@ -12,7 +12,7 @@ import { RemindersSection } from '../components/settings/RemindersSection';
 import { DailyStorySection } from '../components/settings/DailyStorySection';
 import { SsoSection } from '../components/settings/SsoSection';
 import { SsoAdminSection } from '../components/settings/SsoAdminSection';
-import { canRemind, device, hasServer, isNative, luminance, useAppStatus } from '../native';
+import { canRemind, device, hasServer, isNative, luminance, onSystemAppearance, systemPrefersDark, useAppStatus } from '../native';
 import { LANGUAGES } from '../i18n';
 import { Logo } from '../components/Logo';
 import { useTranslation } from 'react-i18next';
@@ -279,6 +279,9 @@ export function Settings() {
   const [autoTheme, setAutoThemeState] = useState<AutoTheme | null>(getAutoTheme);
   const changeAutoTheme = (next: AutoTheme | null) => { setAutoTheme(next); setAutoThemeState(next); };
   const stopAutoTheme = () => { if (autoTheme) changeAutoTheme(null); };
+  // Which of the two is showing now, kept up to date while the page is open.
+  const [systemDark, setSystemDark] = useState(systemPrefersDark);
+  useEffect(() => onSystemAppearance(() => setSystemDark(systemPrefersDark())), []);
 
   // Custom themes (localStorage)
   const [customThemes, setCustomThemes] = useState<ThemeEntry[]>(loadCustomThemes);
@@ -504,12 +507,35 @@ export function Settings() {
 
   // ── Theme card ───────────────────────────────────────────────────────────────
 
-  const ThemeCard = ({ th, customIndex }: { th: ThemeEntry; customIndex?: number }) => {
-    const active = isThemeActive(th);
+  const isLightTheme = (th: ThemeEntry) => luminance(th.base.bg_primary) >= 0.5;
+  const sameTheme = (a: ThemeEntry, b: ThemeEntry) =>
+    a.accent === b.accent && Object.entries(b.base).every(([k, v]) => a.base[k as keyof BaseColors] === v);
+  const matchingSystem = !isServer && !!autoTheme;
+
+  /** Match system on: one light and one dark theme. Off: one theme, kept as it looks now. */
+  const toggleMatchSystem = (on: boolean) => {
+    if (on) {
+      const all = [...BUILTIN_THEMES, ...customThemes];
+      const lights = all.filter(isLightTheme), darks = all.filter(th => !isLightTheme(th));
+      const pick = (list: ThemeEntry[]) => {
+        const th = list.find(isThemeActive) ?? list[0] ?? BUILTIN_THEMES[0];
+        return { name: th.name, accent: th.accent, hover: th.hover, base: th.base };
+      };
+      changeAutoTheme({ light: pick(lights), dark: pick(darks) });
+    } else if (autoTheme) {
+      handleApplyTheme(systemDark ? autoTheme.dark : autoTheme.light);
+    }
+  };
+
+  const ThemeCard = ({ th, customIndex, slot }: { th: ThemeEntry; customIndex?: number; slot?: 'light' | 'dark' }) => {
+    const active = slot && autoTheme ? sameTheme(autoTheme[slot], th) : !matchingSystem && isThemeActive(th);
     return (
       <div className="relative group/card flex flex-col items-center gap-2">
         <button
-          onClick={() => handleApplyTheme(th)}
+          aria-pressed={active}
+          onClick={() => slot && autoTheme
+            ? changeAutoTheme({ ...autoTheme, [slot]: { name: th.name, accent: th.accent, hover: th.hover, base: th.base } })
+            : handleApplyTheme(th)}
           className={`theme-card relative rounded-xl overflow-hidden w-20 h-20${active ? ' theme-card-active' : ''}`}
           style={{ '--card-accent': th.accent } as React.CSSProperties}
         >
@@ -603,44 +629,57 @@ export function Settings() {
                   <input ref={fileInputRef} type="file" accept=".json" className="hidden" onChange={handleImportFile} />
                 </div>
               </div>
-              {!isServer && (() => {
-                const all = [...BUILTIN_THEMES, ...customThemes];
-                const isLight = (th: ThemeEntry) => luminance(th.base.bg_primary) >= 0.5;
-                const pick = (slot: 'light' | 'dark') => (
-                  <label className="flex items-center gap-2 text-sm">
-                    <span className="w-10 text-(--text-secondary)">{slot === 'light' ? 'Light' : 'Dark'}</span>
-                    <select value={autoTheme?.[slot].name ?? ''} className="input !py-1 text-sm"
-                      onChange={e => {
-                        const th = all.find(x => x.name === e.target.value);
-                        if (th && autoTheme) changeAutoTheme({ ...autoTheme, [slot]: th });
-                      }}>
-                      {[...all].sort((a, b) => Number(isLight(b) === (slot === 'light')) - Number(isLight(a) === (slot === 'light')))
-                        .map(th => <option key={th.name} value={th.name}>{th.name}</option>)}
-                    </select>
-                  </label>
-                );
+              {!isServer && (
+                <div className="flex items-center gap-3 rounded-xl bg-(--bg-tertiary)/50 px-3.5 py-3">
+                  <span className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors ${matchingSystem ? 'bg-(--accent)/15 text-(--accent)' : 'bg-(--bg-secondary) text-(--text-secondary)'}`}>
+                    <SunMoon className="w-4 h-4" />
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium">Match system</p>
+                    <p className="text-xs text-(--text-secondary)">
+                      {matchingSystem ? 'Pick a light and a dark theme. They switch with your device’s appearance.' : 'Off: one theme all the time. On: a light and a dark one.'}
+                    </p>
+                  </div>
+                  <Toggle on={matchingSystem} onChange={toggleMatchSystem} />
+                </div>
+              )}
+              {(() => {
+                const entries = [
+                  ...BUILTIN_THEMES.map(th => ({ th, key: th.name, customIndex: undefined as number | undefined })),
+                  ...customThemes.map((th, i) => ({ th, key: `custom-${i}`, customIndex: i as number | undefined })),
+                ];
+                const showing = systemDark ? 'dark' : 'light';
                 return (
-                  <div className="space-y-3">
-                    <Segmented value={autoTheme ? 'auto' : 'one'}
-                      onChange={v => changeAutoTheme(v === 'auto' ? {
-                        light: all.find(isLight) ?? BUILTIN_THEMES[0],
-                        dark: all.find(th => isThemeActive(th) && !isLight(th)) ?? BUILTIN_THEMES[0],
-                      } : null)}
-                      options={[{ value: 'one', label: 'One theme' }, { value: 'auto', label: 'Match system' }]} />
-                    {autoTheme && (
-                      <div className="flex flex-wrap gap-x-6 gap-y-2">
-                        {pick('light')}
-                        {pick('dark')}
-                        <p className="w-full text-xs text-(--text-secondary)">Switches with your device’s light and dark mode. Picking a theme below goes back to one theme.</p>
-                      </div>
-                    )}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {(['light', 'dark'] as const).map(slot => {
+                      const items = entries.filter(x => isLightTheme(x.th) === (slot === 'light'));
+                      const live = matchingSystem && showing === slot;
+                      return (
+                        <div key={slot} className={`rounded-xl space-y-3 border transition-colors ${
+                          matchingSystem ? `p-3.5 ${live ? 'border-(--accent)/50 bg-(--accent)/5' : 'border-(--bg-tertiary)'}` : 'border-transparent'}`}>
+                          <div className="flex items-center gap-2 min-h-5">
+                            {slot === 'light' ? <Sun className="w-3.5 h-3.5 text-(--text-secondary)" /> : <Moon className="w-3.5 h-3.5 text-(--text-secondary)" />}
+                            <span className="text-[11px] font-semibold uppercase tracking-wider text-(--text-secondary)">{slot === 'light' ? 'Light' : 'Dark'}</span>
+                            {matchingSystem && autoTheme && (
+                              <span className="text-xs text-(--text-primary) truncate">· {autoTheme[slot].name}</span>
+                            )}
+                            {live && (
+                              <span className="ml-auto shrink-0 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-(--accent)/15 text-(--accent)">Now</span>
+                            )}
+                          </div>
+                          {items.length ? (
+                            <div className="flex flex-wrap gap-4">
+                              {items.map(x => <ThemeCard key={x.key} th={x.th} customIndex={x.customIndex} slot={matchingSystem ? slot : undefined} />)}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-(--text-secondary)">No {slot} themes yet. Import one with the upload button above.</p>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 );
               })()}
-              <div className="flex flex-wrap gap-4">
-                {BUILTIN_THEMES.map(th => <ThemeCard key={th.name} th={th} />)}
-                {customThemes.map((th, i) => <ThemeCard key={`custom-${i}`} th={th} customIndex={i} />)}
-              </div>
             </section>
 
             <section className="card space-y-4">
