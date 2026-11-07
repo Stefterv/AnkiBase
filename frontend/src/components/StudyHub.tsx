@@ -70,7 +70,7 @@ export function StudyHub() {
         : (!storyIds || storyIds.has(x.ref_id)) && !readIds.has(x.ref_id)));
       if (anki) {
         setAnkiDecks(Object.entries(anki.decks)
-          .map(([name, id]) => ({ name, id, stats: anki.stats[name] }))
+          .map(([name, id]) => ({ name, id, stats: anki.stats[id] }))  // stats are by deck id
           .filter(d => due(d.stats) > 0)
           .sort((a, b) => due(b.stats) - due(a.stats)));
       }
