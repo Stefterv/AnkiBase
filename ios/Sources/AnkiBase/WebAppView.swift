@@ -36,6 +36,7 @@ struct WebAppView: UIViewRepresentable {
             coordinator?.send("ankibase-open", ["path": path])
         }
         web.load(URLRequest(url: AppSchemeHandler.start))
+        context.coordinator.watchAppearance()
 
         // The tab bar, along the bottom (it makes room for the home indicator itself);
         // hidden until the page says what's on it.
@@ -80,6 +81,9 @@ struct WebAppView: UIViewRepresentable {
             "platform": "ios",
             "reminders": Reminders.shared.state(),
             "tabBar": true,
+            // The phone's light or dark mode (the page can't tell: the app sets its own, see
+            // AnkiBaseApp's preferredColorScheme); updates come as `ankibase-appearance`.
+            "systemDark": Self.systemDark,
         ]
         let json = (try? JSONSerialization.data(withJSONObject: native)).map { String(decoding: $0, as: UTF8.self) } ?? "{}"
         return """
@@ -94,6 +98,13 @@ struct WebAppView: UIViewRepresentable {
           if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', apply); else apply();
         })();
         """
+    }
+
+    /// The phone's own appearance: the window scene's, which the app's colour scheme for the
+    /// theme (set on the window) doesn't change.
+    static var systemDark: Bool {
+        let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
+        return (scene?.traitCollection ?? UITraitCollection.current).userInterfaceStyle == .dark
     }
 
     final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler, UITabBarDelegate,
@@ -132,6 +143,32 @@ struct WebAppView: UIViewRepresentable {
         func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
             guard tabs.indices.contains(item.tag) else { return }
             send("ankibase-tab", ["to": tabs[item.tag].to])
+        }
+
+        // MARK: The phone's light and dark mode (Settings → Appearance → Match system)
+
+        private var lastDark: Bool?
+
+        /// Tell the page when the phone switches between light and dark: as the scene's
+        /// appearance changes, and when the app comes back (after Control Center, say).
+        func watchAppearance() {
+            lastDark = WebAppView.systemDark
+            NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+                self?.sendAppearance()
+            }
+            DispatchQueue.main.async { [weak self] in
+                guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first else { return }
+                scene.registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (_: UIWindowScene, _: UITraitCollection) in
+                    self?.sendAppearance()
+                }
+            }
+        }
+
+        private func sendAppearance() {
+            let dark = WebAppView.systemDark
+            guard dark != lastDark else { return }
+            lastDark = dark
+            send("ankibase-appearance", ["dark": dark])
         }
 
         // MARK: Messages from the page (native.ts)

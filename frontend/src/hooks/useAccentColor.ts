@@ -1,4 +1,4 @@
-import { iconFor, setNativeIconOverride, syncNativeTheme } from '../native';
+import { iconFor, onSystemAppearance, setNativeIconOverride, syncNativeTheme, systemPrefersDark } from '../native';
 
 const STORAGE_KEY = 'ankibase-accent';
 const BASE_COLORS_KEY = 'ankibase-base-colors';
@@ -108,7 +108,6 @@ export interface ThemeColors { name: string; accent: string; hover: string; base
 export interface AutoTheme { light: ThemeColors; dark: ThemeColors }
 
 const AUTO_KEY = 'ankibase-theme-auto';
-const darkMode = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
 
 export function getAutoTheme(): AutoTheme | null {
   try {
@@ -121,7 +120,7 @@ export function getAutoTheme(): AutoTheme | null {
 export function applyAutoTheme(): boolean {
   const auto = getAutoTheme();
   if (!auto) return false;
-  const theme = (darkMode?.matches ?? true) ? auto.dark : auto.light;
+  const theme = systemPrefersDark() ? auto.dark : auto.light;
   // One home screen icon (the dark theme's) rather than a new one at every switch.
   setNativeIconOverride(iconFor(auto.dark.accent, auto.dark.base.bg_secondary));
   applyAccentColor(theme.accent, theme.hover);
@@ -144,7 +143,7 @@ export function setAutoTheme(auto: AutoTheme | null) {
 /** At start: the system's theme now, and again whenever it changes (sunset, Control Center). */
 export function initAutoTheme() {
   applyAutoTheme();
-  darkMode?.addEventListener('change', () => applyAutoTheme());
+  onSystemAppearance(() => applyAutoTheme());
 }
 
 export const ACCENT_PRESETS = [

@@ -4,7 +4,7 @@
  *  inject `window.ankibaseNative`. */
 import { useEffect, useState } from 'react';
 
-interface NativeInfo { version: string; build: string; platform: string; reminders?: ReminderSettings; tabBar?: boolean }
+interface NativeInfo { version: string; build: string; platform: string; reminders?: ReminderSettings; tabBar?: boolean; systemDark?: boolean }
 interface NativeWindow {
   ankibaseNative?: NativeInfo;
   webkit?: { messageHandlers?: { ankibase?: { postMessage: (message: unknown) => void } } };
@@ -83,6 +83,20 @@ let themeTimer: ReturnType<typeof setTimeout> | undefined;
 
 /** Tell the app the current colours: the status bar, the area behind the page and the
  *  home screen icon follow the theme. Debounced, so dragging a colour picker is cheap. */
+/** The device's dark mode. The iPhone app sets the web view's own colour scheme to the theme's
+ *  (for the status bar), so prefers-color-scheme can't tell there; the app says it instead. */
+let appDark = native?.systemDark;
+export function systemPrefersDark(): boolean {
+  if (appDark !== undefined) return appDark;
+  return typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-color-scheme: dark)').matches;
+}
+export function onSystemAppearance(handler: () => void) {
+  const media = typeof window !== 'undefined' ? window.matchMedia?.('(prefers-color-scheme: dark)') : null;
+  const fromApp = (event: Event) => { appDark = !!(event as CustomEvent<{ dark: boolean }>).detail?.dark; handler(); };
+  if (appDark !== undefined) window.addEventListener('ankibase-appearance', fromApp);
+  else media?.addEventListener('change', handler);
+}
+
 /** The home screen icon to keep, whatever the colours (while the theme follows the system:
  *  iOS asks about every icon change, so it shouldn't change at sunset). */
 let iconOverride: string | null = null;
