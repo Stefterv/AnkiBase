@@ -71,6 +71,7 @@ def ipa(path: Path, icons: Path):
         "CFBundlePrimaryIcon": {"CFBundleIconFiles": [info.get("CFBundleIconFile", "AppIcon")], "UIPrerenderedIcon": False},
         "CFBundleAlternateIcons": alternates,
     }
+    info["CFBundleIcons~ipad"] = info["CFBundleIcons"]  # iPads read their own key
     temporary = path.with_suffix(".tmp")
     with zipfile.ZipFile(temporary, "w", zipfile.ZIP_DEFLATED) as archive:
         for entry, data in entries:

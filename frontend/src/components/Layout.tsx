@@ -240,7 +240,7 @@ export function Layout() {
               <NavLink
                 key={to}
                 to={to}
-                className={({ isActive }) => `btn btn-secondary header-btn md:hidden flex items-center ${isActive ? 'text-(--accent)' : ''}`}
+                className={({ isActive }) => `btn btn-secondary header-btn ${hasNativeTabs ? '' : 'md:hidden'} flex items-center ${isActive ? 'text-(--accent)' : ''}`}
                 title={label}
                 aria-label={label}
               >
@@ -306,7 +306,8 @@ export function Layout() {
       {loginOpen && <AppLoginModal onClose={closeLogin} />}
 
       {/* Desktop Navigation - hidden on mobile */}
-      <nav className="hidden md:block bg-(--bg-secondary) border-b border-(--bg-tertiary)">
+      {/* Not in the iPhone app, on iPad either: its own tab bar is the navigation. */}
+      <nav className={`${hasNativeTabs ? 'hidden' : 'hidden md:block'} bg-(--bg-secondary) border-b border-(--bg-tertiary)`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
           <div className="flex gap-1">
             {navItems.map(({ to, icon: Icon, label }) => (

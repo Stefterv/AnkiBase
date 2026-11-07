@@ -377,6 +377,10 @@ input[type="checkbox"]:checked::after {
   .safe-pb-main {
     padding-bottom: 1rem;
   }
+  /* The app's own tab bar is there on iPad too. */
+  html.native-tabs .safe-pb-main {
+    padding-bottom: calc(5rem + var(--safe-bottom, env(safe-area-inset-bottom, 0px)));
+  }
 }
 
 /* Heatmap year slide animations */
@@ -570,6 +574,7 @@ html.native label {
 }
 @media (min-width: 768px) {
   .above-tabbar { bottom: 1.5rem; }
+  html.native-tabs .above-tabbar { bottom: calc(3.5rem + var(--safe-bottom, env(safe-area-inset-bottom, 0px)) + 0.75rem); }
 }
 @media (max-width: 639px) {
   .answer-bar { padding-bottom: calc(0.75rem + var(--safe-bottom, env(safe-area-inset-bottom, 0px))); }
