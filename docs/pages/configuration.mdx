@@ -29,6 +29,28 @@ After editing, restart the service:
 systemctl restart ankibase
 ```
 
+## Single sign-on (OpenID Connect)
+
+AnkiBase can sign people in with an OpenID Connect provider such as Authentik, Keycloak, Authelia, Zitadel or Google, next to the usual username and password.
+
+1. Register AnkiBase as a client (an "OAuth2/OpenID application") with the provider. Use the authorization code flow, and the redirect URI `https://<your server>/api/auth/oidc/callback`.
+2. Add the client to `backend/.env` and restart:
+
+| Variable | Description | Default |
+|---|---|---|
+| `OIDC_ISSUER` | The provider's issuer URL (where `/.well-known/openid-configuration` lives) | – |
+| `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` | The client's ID and secret (no secret for a public client) | – |
+| `OIDC_NAME` | The login button's name: "Sign in with …" | `SSO` |
+| `OIDC_SCOPES` | Scopes to ask for | `openid profile email` |
+| `OIDC_REDIRECT_URI` | The callback URL, when AnkiBase can't work it out from the request | `<server>/api/auth/oidc/callback` |
+| `OIDC_AUTO_CREATE` | Make a user for provider accounts that aren't connected to one yet | `false` |
+
+The login page then shows **Sign in with …**. Users are matched by their provider account, never by name or e-mail: existing users connect theirs once under **Settings → Account → Connect**, after signing in with their password. With `OIDC_AUTO_CREATE=true`, anyone the provider lets in gets a new user (no admin rights, no profiles until an admin gives them some), so limit who can use the application at the provider.
+
+<Callout type="info">
+Single sign-on works in the browser. The iPhone and Android apps keep using a username and password.
+</Callout>
+
 ## AI Providers
 
 API keys are managed in the app under **Settings → AI** (or **AI settings** on the Story tab). Each provider has a default model, and you can switch models per story:

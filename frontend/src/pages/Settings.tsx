@@ -10,6 +10,7 @@ import { SyncSection } from '../components/settings/SyncSection';
 import { ServerSection } from '../components/settings/ServerSection';
 import { RemindersSection } from '../components/settings/RemindersSection';
 import { DailyStorySection } from '../components/settings/DailyStorySection';
+import { SsoSection } from '../components/settings/SsoSection';
 import { canRemind, device, hasServer, isNative, useAppStatus } from '../native';
 import { LANGUAGES } from '../i18n';
 import { Logo } from '../components/Logo';
@@ -476,6 +477,7 @@ export function Settings() {
     } catch (err) { console.error(err); }
   };
 
+  const noPassword = currentUser?.has_password === false;
   const handlePasswordReset = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(''); setSuccess('');
@@ -486,6 +488,7 @@ export function Settings() {
       await auth.changePassword(currentPassword, newPassword);
       setSuccess(t('settings.passwordChanged'));
       setCurrentPassword(''); setNewPassword(''); setConfirmPassword('');
+      if (currentUser?.has_password === false) loadAll();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to change password');
     } finally { setLoading(false); }
@@ -707,16 +710,17 @@ export function Settings() {
                 )}
               </div>
             </section>
+            {currentUser && <SsoSection user={currentUser} onChange={loadAll} />}
             <section className="card space-y-4">
               <div>
-                <h3 className="font-semibold">{t('settings.changePassword')}</h3>
-                <p className="text-xs text-(--text-secondary) mt-0.5">{t('settings.passwordDescription')}</p>
+                <h3 className="font-semibold">{noPassword ? 'Set a password' : t('settings.changePassword')}</h3>
+                <p className="text-xs text-(--text-secondary) mt-0.5">{noPassword ? `You sign in with ${currentUser?.sso?.name ?? 'single sign-on'}. A password lets you sign in without it too.` : t('settings.passwordDescription')}</p>
               </div>
               {error && <p className="text-sm text-(--error) anim-rise">{error}</p>}
               {success && <p className="text-sm text-green-400 flex items-center gap-2 anim-rise"><Check className="w-4 h-4" />{success}</p>}
               <form onSubmit={handlePasswordReset} className="space-y-3 max-w-md">
-                <input type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} autoComplete="current-password"
-                  placeholder={t('settings.currentPasswordPlaceholder')} className="input w-full" required disabled={loading} aria-label={t('settings.currentPassword')} />
+                {!noPassword && <input type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} autoComplete="current-password"
+                  placeholder={t('settings.currentPasswordPlaceholder')} className="input w-full" required disabled={loading} aria-label={t('settings.currentPassword')} />}
                 <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} autoComplete="new-password"
                   placeholder={t('settings.newPasswordPlaceholder')} className="input w-full" required disabled={loading} aria-label={t('settings.newPassword')} />
                 <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} autoComplete="new-password"

@@ -53,6 +53,9 @@ app.add_middleware(
 # Who's asking and which of their profiles (security.py).
 app.add_middleware(security.RequestContext)
 
+import oidc  # single sign-on (OpenID Connect)
+app.include_router(oidc.router)
+
 
 class SecurityHeaders:
     """Headers every answer gets: no MIME sniffing, no framing by other sites, no referrers
@@ -441,6 +444,7 @@ def _user_info(user: dict) -> dict:
         "profile": {"id": profile["id"], "name": profile["container_name"]} if profile else None,
         **_resolve_user_accent(user["user_id"]),
         **_resolve_user_base_colors(user["user_id"]),
+        **oidc.user_info(user["user_id"]),
     }
 
 
@@ -539,8 +543,9 @@ async def change_password_endpoint(
     if not full_user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Verify current password (400, not 401: a wrong password here isn't a logout)
-    if not verify_password(request.current_password, full_user['password_hash']):
+    # Verify current password (400, not 401: a wrong password here isn't a logout).
+    # Users made by single sign-on have none yet: they set their first one.
+    if full_user.get("password_login", 1) and not verify_password(request.current_password, full_user['password_hash']):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
 
     if len(request.new_password) < MIN_PASSWORD:

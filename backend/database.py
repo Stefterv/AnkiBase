@@ -105,6 +105,20 @@ def init_global_db():
                     # Until now every user could change the keys; keep that for existing users.
                     cursor.execute("UPDATE users SET can_manage_ai_keys = 1")
 
+        # Made by single sign-on (OIDC_AUTO_CREATE) without a password of their own: 0.
+        if 'password_login' not in columns:
+            cursor.execute("ALTER TABLE users ADD COLUMN password_login INTEGER DEFAULT 1")
+        # Single sign-on: the provider's account (issuer + subject) a user signs in with (oidc.py).
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS oidc_identities (
+                issuer TEXT NOT NULL,
+                subject TEXT NOT NULL,
+                user_id INTEGER NOT NULL UNIQUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (issuer, subject)
+            )
+        """)
+
         # App-wide settings table (key-value)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS settings (
@@ -1031,11 +1045,11 @@ def count_admins() -> int:
 
 
 def update_user_password(user_id: int, new_password: str) -> bool:
-    """Update a user's password."""
+    """Update a user's password (which also lets a single sign-on user sign in with it)."""
     password_hash = hash_password(new_password)
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("UPDATE users SET password_hash = ? WHERE id = ?", (password_hash, user_id))
+        cursor.execute("UPDATE users SET password_hash = ?, password_login = 1 WHERE id = ?", (password_hash, user_id))
         conn.commit()
         return cursor.rowcount > 0
 
@@ -1069,15 +1083,50 @@ def delete_user(user_id: int) -> bool:
         cursor = conn.cursor()
         cursor.execute("DELETE FROM user_container_permissions WHERE user_id = ?", (user_id,))
         cursor.execute("DELETE FROM study_sessions WHERE user_id = ?", (user_id,))
+        cursor.execute("DELETE FROM oidc_identities WHERE user_id = ?", (user_id,))
         cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
         conn.commit()
         return cursor.rowcount > 0
 
 
+def get_oidc_user_id(issuer: str, subject: str) -> Optional[int]:
+    """The user who signs in with this single sign-on account, if any."""
+    with get_db() as conn:
+        row = conn.execute("SELECT user_id FROM oidc_identities WHERE issuer = ? AND subject = ?", (issuer, subject)).fetchone()
+        return row[0] if row else None
+
+
+def get_oidc_identity(user_id: int) -> Optional[dict]:
+    with get_db() as conn:
+        row = conn.execute("SELECT issuer, subject, created_at FROM oidc_identities WHERE user_id = ?", (user_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def link_oidc_identity(user_id: int, issuer: str, subject: str) -> None:
+    """Sign this user in with that single sign-on account (replacing one linked before)."""
+    with get_db() as conn:
+        conn.execute("DELETE FROM oidc_identities WHERE user_id = ?", (user_id,))
+        conn.execute("INSERT INTO oidc_identities (issuer, subject, user_id) VALUES (?, ?, ?)", (issuer, subject, user_id))
+        conn.commit()
+
+
+def unlink_oidc_identity(user_id: int) -> bool:
+    with get_db() as conn:
+        cursor = conn.execute("DELETE FROM oidc_identities WHERE user_id = ?", (user_id,))
+        conn.commit()
+        return cursor.rowcount > 0
+
+
+def set_password_login(user_id: int, enabled: bool) -> None:
+    with get_db() as conn:
+        conn.execute("UPDATE users SET password_login = ? WHERE id = ?", (1 if enabled else 0, user_id))
+        conn.commit()
+
+
 def verify_user_credentials(username: str, password: str) -> Optional[dict]:
     """Verify user credentials and return user info if valid."""
     user = get_user_by_username(username)
-    if user and verify_password(password, user['password_hash']):
+    if user and user.get('password_login', 1) and verify_password(password, user['password_hash']):
         # Don't include password hash in returned user
         user_info = dict(user)
         user_info.pop('password_hash', None)

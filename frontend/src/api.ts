@@ -76,6 +76,10 @@ export interface User {
   has_personal_accent?: boolean;
   base_colors?: Record<string, string> | null;
   has_personal_base_colors?: boolean;
+  /** Single sign-on, when the server has an OpenID Connect provider set up. */
+  sso?: { enabled: boolean; name: string; linked: boolean } | null;
+  /** False for users made by single sign-on who haven't set a password. */
+  has_password?: boolean;
 }
 
 export const auth = {
@@ -87,6 +91,9 @@ export const auth = {
   logout: () => fetchAPI('/auth/logout', { method: 'POST' }),
   check: () => fetchAPI<{ authenticated: boolean; user?: User }>('/auth/check'),
   me: () => fetchAPI<User>('/auth/me'),
+  /** Whether the server offers single sign-on, and its name (no login needed). */
+  sso: () => fetchAPI<{ enabled: boolean; name: string }>('/auth/oidc'),
+  unlinkSso: () => fetchAPI<{ success: boolean }>('/auth/oidc/link', { method: 'DELETE' }),
   changePassword: (currentPassword: string, newPassword: string) =>
     fetchAPI<{ success: boolean; message: string }>('/auth/change-password', {
       method: 'POST',

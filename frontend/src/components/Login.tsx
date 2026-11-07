@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Eye, EyeOff, Server, Smartphone } from 'lucide-react';
+import { Eye, EyeOff, KeyRound, Server, Smartphone } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ApiError, auth, setup, theme as themeApi } from '../api';
 
 import { Logo } from './Logo';
+import { SSO_ERRORS } from './settings/ssoErrors';
 import { applyAccentColor, saveAccentColor, applyBaseColors, saveBaseColors } from '../hooks/useAccentColor';
 import { appStatus, device, isNative, useAppStatus } from '../native';
 
@@ -24,6 +25,9 @@ export function Login() {
   const [editingServer, setEditingServer] = useState(false);
   const [serverUrl, setServerUrl] = useState('');
   const [serverError, setServerError] = useState('');
+  const [sso, setSso] = useState<{ enabled: boolean; name: string } | null>(null);
+  const [params] = useSearchParams();
+  const ssoError = params.get('sso_error');
 
   // Restore lockout from sessionStorage on mount
   useEffect(() => {
@@ -39,6 +43,8 @@ export function Login() {
     setup.status().then(s => {
       if (s.needs_setup || !s.has_container) navigate('/setup', { replace: true });
     }).catch(() => {});
+    // Single sign-on: not in the app, whose session lives in the app, not the browser.
+    if (!isNative) auth.sso().then(setSso).catch(() => {});
     if (!localStorage.getItem('ankibase-accent'))
       themeApi.get().then(t => applyAccentColor(t.accent, t.hover)).catch(() => {});
     if (!localStorage.getItem('ankibase-base-colors'))
@@ -197,6 +203,20 @@ export function Login() {
             {loading ? t('login.loggingIn') : t('login.loginButton')}
           </button>
         </form>
+
+        {sso?.enabled && (
+          <>
+            <div className="flex items-center gap-3 my-5 text-xs text-(--text-secondary)">
+              <div className="flex-1 h-px bg-(--bg-tertiary)" /> or <div className="flex-1 h-px bg-(--bg-tertiary)" />
+            </div>
+            <a href="/api/auth/oidc/start" className="btn btn-secondary w-full flex items-center justify-center gap-2">
+              <KeyRound className="w-4 h-4" /> Sign in with {sso.name}
+            </a>
+          </>
+        )}
+        {ssoError && !error && (
+          <p className="text-(--error) text-sm text-center mt-4">{SSO_ERRORS[ssoError] ?? SSO_ERRORS.provider}</p>
+        )}
 
         {isNative && (
           <div className="mt-6 pt-5 border-t border-(--bg-tertiary) space-y-3">

@@ -31,6 +31,17 @@ class Settings(BaseSettings):
     app_port: int = 8000
     # How the in-app updater finds new versions: "release" (tagged releases) or "main".
     update_channel: str = "release"
+    # Single sign-on with an OpenID Connect provider (Authentik, Keycloak, Authelia, Google…), see oidc.py.
+    oidc_issuer: str = ""
+    oidc_client_id: str = ""
+    oidc_client_secret: str = ""
+    oidc_name: str = "SSO"  # the login button: "Sign in with <name>"
+    oidc_scopes: str = "openid profile email"
+    # The callback URL registered with the provider; empty: <this server>/api/auth/oidc/callback.
+    oidc_redirect_uri: str = ""
+    # Make an AnkiBase user for provider accounts that aren't linked to one yet (no profiles
+    # until an admin gives them some). Off: only users who linked SSO in Settings → Account.
+    oidc_auto_create: bool = False
 
     class Config:
         env_file = ".env"
