@@ -1,23 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { decks } from '../api';
-import { isIOS } from '../native';
 
-/** How many top-level decks are behind today (reviews or learning cards due): the Study
- *  tab's badge. The iPhone app asks its engine, as the icon's badge does (Reminders.swift),
- *  so the two agree; elsewhere it's counted from the decks' due counts. */
-async function countBehind(): Promise<number> {
-  if (isIOS) {
-    const r = await fetch('/api/app/behind');
-    if (r.ok) {
-      const { days } = await r.json() as { days: { decks: string[] }[] };
-      return days[0]?.decks.length ?? 0;
-    }
-  }
+/** How many cards are due (reviews and learning cards, as Anki counts "due"; new cards
+ *  aren't): the Study tab's badge, in the browser and the apps. The top-level decks' counts
+ *  include their subdecks'. (The iPhone app's icon just shows 1 while anything is due.) */
+async function countDue(): Promise<number> {
   const data = await decks.list();
-  return Object.entries(data.decks).filter(([name, id]) => {
+  return Object.entries(data.decks).reduce((sum, [name, id]) => {
     const stats = data.stats[id];
-    return !name.includes('::') && !!stats && stats.review_count + stats.learn_count > 0;
-  }).length;
+    return name.includes('::') || !stats ? sum : sum + stats.review_count + stats.learn_count;
+  }, 0);
 }
 
 /** The count, kept fresh: after a sync, when the app comes back, and after studying
@@ -28,7 +20,7 @@ export function useStudyBadge(studying: boolean): number {
 
   useEffect(() => {
     let live = true;
-    const refresh = () => { countBehind().then(n => { if (live) setCount(n); }).catch(() => {}); };
+    const refresh = () => { countDue().then(n => { if (live) setCount(n); }).catch(() => {}); };
     refresh();
     const onVisible = () => { if (document.visibilityState === 'visible') refresh(); };
     window.addEventListener('anki-sync-complete', refresh);

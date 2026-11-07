@@ -62,7 +62,7 @@ function Toast({ icon, title, message, duration, onClose }: Omit<ToastData, 'id'
   );
 }
 
-/** A count on a nav item (decks behind, on Study). */
+/** A count on a nav item (cards due, on Study). */
 function NavBadge({ value, className = '' }: { value: string | null; className?: string }) {
   if (!value) return null;
   return (
@@ -134,9 +134,9 @@ export function Layout() {
   const mobileNavItems = navItems.slice(0, 5);
   const mobileMoreItems = navItems.slice(5);
 
-  // The decks behind today, on the Study tab (the same count as the app icon's badge).
-  const behind = useStudyBadge(onStudyPath);
-  const badgeFor = (to: string) => (to === '/study' && behind > 0 ? String(behind) : null);
+  // The cards due, on the Study tab (in the iPhone app's tab bar too).
+  const dueCards = useStudyBadge(onStudyPath);
+  const badgeFor = (to: string) => (to === '/study' && dueCards > 0 ? (dueCards > 999 ? '999+' : String(dueCards)) : null);
 
   // The iPhone app draws the tab bar itself (UITabBar): tell it the tabs, which one is
   // open, and when to get out of the way, and go where its taps say.

@@ -2,7 +2,8 @@ import UIKit
 import UserNotifications
 
 /// Settings → Reminders: a daily notification naming the decks that are behind (reviews or
-/// learning cards due), and the app icon's badge with how many there are.
+/// learning cards due), and the app icon's badge: 1 while anything is behind (the count of
+/// cards due is on the Study tab).
 ///
 /// iOS doesn't wake the app to count, so whenever the app goes to the background or a sync
 /// finishes, this schedules the next week's reminders, each with the decks the engine
@@ -85,7 +86,7 @@ final class Reminders {
             return
         }
         guard let days = behind(), let today = days.first else { return }
-        center.setBadgeCount(today.decks.count, withCompletionHandler: nil)
+        center.setBadgeCount(today.decks.isEmpty ? 0 : 1, withCompletionHandler: nil)
 
         // A reminder at the chosen time on each of the coming days, with the decks behind on
         // the Anki day it falls in (they start at the day rollover, 4am by default).
@@ -101,7 +102,7 @@ final class Reminders {
             let content = UNMutableNotificationContent()
             content.title = text("title", "Time to study")
             content.body = body(days[index].decks)
-            content.badge = NSNumber(value: days[index].decks.count)
+            content.badge = 1
             content.sound = .default
             let when = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: fire)
             let trigger = UNCalendarNotificationTrigger(dateMatching: when, repeats: false)
