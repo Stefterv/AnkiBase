@@ -64,6 +64,11 @@ The project is made from `project.yml` by XcodeGen and isn't kept in git; run
 xtool builds, so the code is shared. Set `ANKIBASE_TEAM_ID` (and your own
 `ANKIBASE_BUNDLE_ID`) in `local.env` so signing survives making the project again.
 
+Xcode Cloud makes the project the same way: `ci_scripts/ci_post_clone.sh` installs the
+tools, writes `local.env` from the workflow's `ANKIBASE_*` environment variables and runs
+XcodeGen. Build for a device (an Archive action, or Build with "Any iOS Device"), not the
+Simulator.
+
 ## Your build's settings
 
 Copy `local.env.example` to `local.env` (ignored by git) to give your build its own bundle
