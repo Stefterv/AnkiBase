@@ -34,7 +34,9 @@ systemctl restart ankibase
 AnkiBase can sign people in with an OpenID Connect provider such as Authentik, Keycloak, Authelia, Zitadel or Google, next to the usual username and password.
 
 1. Register AnkiBase as a client (an "OAuth2/OpenID application") with the provider. Use the authorization code flow, and the redirect URI `https://<your server>/api/auth/oidc/callback`.
-2. Add the client to `backend/.env` and restart:
+2. As an admin, open **Settings → Users → Single sign-on**, fill in the issuer URL, client ID and secret, turn it on and save. Saving checks that the provider can be reached. The client secret is stored encrypted.
+
+You can also set it in `backend/.env` (restart afterwards). These are used until an admin saves the settings in the app; **Use the .env settings instead** there goes back to them.
 
 | Variable | Description | Default |
 |---|---|---|
@@ -43,7 +45,7 @@ AnkiBase can sign people in with an OpenID Connect provider such as Authentik, K
 | `OIDC_NAME` | The login button's name: "Sign in with …" | `SSO` |
 | `OIDC_SCOPES` | Scopes to ask for | `openid profile email` |
 | `OIDC_REDIRECT_URI` | The callback URL, when AnkiBase can't work it out from the request | `<server>/api/auth/oidc/callback` |
-| `OIDC_AUTO_CREATE` | Make a user for provider accounts that aren't connected to one yet | `false` |
+| `OIDC_AUTO_CREATE` | Make a user for provider accounts that aren't connected to one yet (“Create users automatically”) | `false` |
 
 The login page then shows **Sign in with …**. Users are matched by their provider account, never by name or e-mail: existing users connect theirs once under **Settings → Account → Connect**, after signing in with their password. With `OIDC_AUTO_CREATE=true`, anyone the provider lets in gets a new user (no admin rights, no profiles until an admin gives them some), so limit who can use the application at the provider.
 

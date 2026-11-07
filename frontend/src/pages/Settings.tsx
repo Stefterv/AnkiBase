@@ -11,6 +11,7 @@ import { ServerSection } from '../components/settings/ServerSection';
 import { RemindersSection } from '../components/settings/RemindersSection';
 import { DailyStorySection } from '../components/settings/DailyStorySection';
 import { SsoSection } from '../components/settings/SsoSection';
+import { SsoAdminSection } from '../components/settings/SsoAdminSection';
 import { canRemind, device, hasServer, isNative, useAppStatus } from '../native';
 import { LANGUAGES } from '../i18n';
 import { Logo } from '../components/Logo';
@@ -734,7 +735,7 @@ export function Settings() {
           {active === 'reminders' && <RemindersSection />}
           {active === 'server' && <ServerSection user={app?.server ? currentUser : null} />}
           {active === 'ai' && <><AiSection /><DailyStorySection /></>}
-          {active === 'users' && currentUser?.is_admin && <UserManagement />}
+          {active === 'users' && currentUser?.is_admin && <>{!isNative && <SsoAdminSection />}<UserManagement /></>}
         </div>
       </div>
 

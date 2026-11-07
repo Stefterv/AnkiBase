@@ -118,6 +118,20 @@ export const auth = {
   clearBaseColors: () => fetchAPI<Record<string, string>>('/auth/base-colors', { method: 'DELETE' }),
 };
 
+/** Settings → Users → Single sign-on (admins). `source`: saved here, .env's OIDC_* variables, or nothing. */
+export interface OidcConfig {
+  enabled: boolean; issuer: string; client_id: string; has_secret: boolean; name: string; scopes: string;
+  redirect_uri: string; auto_create: boolean; source: 'settings' | 'env' | 'none'; default_redirect_uri: string;
+}
+export type OidcConfigUpdate = Omit<OidcConfig, 'has_secret' | 'source' | 'default_redirect_uri'> & { client_secret?: string | null };
+
+export const oidcAdmin = {
+  get: () => fetchAPI<OidcConfig>('/admin/oidc'),
+  save: (c: OidcConfigUpdate) => fetchAPI<OidcConfig>('/admin/oidc', { method: 'PUT', body: JSON.stringify(c) }),
+  /** Forget the saved settings and use .env's again. */
+  reset: () => fetchAPI<OidcConfig>('/admin/oidc', { method: 'DELETE' }),
+};
+
 export const theme = {
   get: () => fetchAPI<{ accent: string; hover: string }>('/theme'),
   set: (accent: string, hover?: string) =>

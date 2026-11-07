@@ -8,7 +8,9 @@ Users are matched by the provider's issuer + subject, never by username or e-mai
 could pick a name at the provider to take over an account). Existing users link their provider
 account in Settings → Account; with OIDC_AUTO_CREATE, unknown provider accounts get a new user.
 
-Configured with OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET (config.Settings).
+Admins set it up in Settings → Users → Single sign-on, stored in the settings table as
+"oidc" (the client secret encrypted with security.encrypt). Until they save it there, the
+OIDC_* variables in .env are used (config.Settings).
 """
 import base64
 import hashlib
@@ -16,15 +18,16 @@ import json
 import re
 import secrets
 import time
+from dataclasses import dataclass
 from typing import Optional
 from urllib.parse import urlencode
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
+from pydantic import BaseModel
 
 import security
-from config import get_settings
 
 router = APIRouter()
 
@@ -33,16 +36,79 @@ FLOW_SECONDS = 600
 _discovery: dict = {}  # issuer -> (fetched at, document)
 
 
-def enabled() -> bool:
+SETTING = "oidc"
+
+
+@dataclass
+class Config:
+    enabled: bool = False
+    issuer: str = ""
+    client_id: str = ""
+    client_secret: str = ""
+    name: str = "SSO"  # the login button: "Sign in with <name>"
+    scopes: str = "openid profile email"
+    # The callback URL registered with the provider; empty: <this server>/api/auth/oidc/callback.
+    redirect_uri: str = ""
+    # Make a user for provider accounts that aren't linked to one yet (no profiles until an
+    # admin gives them some). Off: only users who connected SSO in Settings → Account.
+    auto_create: bool = False
+    source: str = "settings"  # where it comes from: "settings" (Settings → Users), "env" (.env) or "none"
+
+
+def _env_config() -> Config:
+    from config import get_settings
     s = get_settings()
-    return bool(s.oidc_issuer and s.oidc_client_id)
+    return Config(enabled=bool(s.oidc_issuer and s.oidc_client_id), issuer=s.oidc_issuer, client_id=s.oidc_client_id,
+                  client_secret=s.oidc_client_secret, name=s.oidc_name, scopes=s.oidc_scopes,
+                  redirect_uri=s.oidc_redirect_uri, auto_create=s.oidc_auto_create,
+                  source="env" if s.oidc_issuer or s.oidc_client_id else "none")
 
 
-async def _provider() -> dict:
+def get_config() -> Config:
+    """The admin's settings; until there are any, .env's."""
+    from database import get_setting
+    saved = get_setting(SETTING)
+    if not saved:
+        cfg = _env_config()
+    else:
+        cfg = _from_saved(saved)
+    cfg.name = cfg.name or "SSO"
+    cfg.scopes = cfg.scopes or "openid profile email"
+    return cfg
+
+
+def _from_saved(saved: str) -> Config:
+    try:
+        raw = json.loads(saved)
+    except ValueError:
+        raw = {}
+    cfg = Config(**{k: v for k, v in raw.items() if k in Config.__dataclass_fields__ and k != "client_secret"})
+    if raw.get("client_secret"):
+        try:
+            cfg.client_secret = security.decrypt(raw["client_secret"])
+        except Exception:
+            print("✗ Couldn't decrypt the single sign-on client secret; set it again in Settings → Users")
+    cfg.source = "settings"
+    return cfg
+
+
+def _save_config(cfg: Config) -> None:
+    from database import set_setting
+    data = {k: v for k, v in cfg.__dict__.items() if k != "source"}
+    data["client_secret"] = security.encrypt(cfg.client_secret) if cfg.client_secret else ""
+    set_setting(SETTING, json.dumps(data))
+
+
+def enabled() -> bool:
+    c = get_config()
+    return bool(c.enabled and c.issuer and c.client_id)
+
+
+async def _provider(issuer: Optional[str] = None, fresh: bool = False) -> dict:
     """The provider's discovery document (cached for an hour)."""
-    issuer = get_settings().oidc_issuer.rstrip("/")
+    issuer = (issuer or get_config().issuer).rstrip("/")
     cached = _discovery.get(issuer)
-    if cached and time.time() - cached[0] < 3600:
+    if cached and not fresh and time.time() - cached[0] < 3600:
         return cached[1]
     async with httpx.AsyncClient(timeout=15) as client:
         r = await client.get(f"{issuer}/.well-known/openid-configuration")
@@ -56,12 +122,7 @@ async def _provider() -> dict:
 
 
 def _redirect_uri(request: Request) -> str:
-    configured = get_settings().oidc_redirect_uri
-    if configured:
-        return configured
-    proto = "https" if security.is_https(request) else "http"
-    host = request.headers.get("x-forwarded-host", "").split(",")[0].strip() or request.headers.get("host") or request.url.netloc
-    return f"{proto}://{host}/api/auth/oidc/callback"
+    return get_config().redirect_uri or _redirect_uri_default(request)
 
 
 def _b64url(data: bytes) -> str:
@@ -86,7 +147,7 @@ def _fail(where: str, code: str) -> RedirectResponse:
 @router.get("/api/auth/oidc")
 async def oidc_info():
     """Whether single sign-on is set up, and what the login button says (no login needed)."""
-    return {"enabled": enabled(), "name": get_settings().oidc_name or "SSO"}
+    return {"enabled": enabled(), "name": get_config().name}
 
 
 @router.get("/api/auth/oidc/start")
@@ -102,14 +163,14 @@ async def oidc_start(request: Request, link: bool = False):
     except Exception as e:
         print(f"✗ OIDC discovery failed: {e}")
         return _fail("link" if link else "login", "provider_unreachable")
-    settings = get_settings()
+    settings = get_config()
     state, nonce, verifier = secrets.token_urlsafe(24), secrets.token_urlsafe(24), secrets.token_urlsafe(48)
     redirect_uri = _redirect_uri(request)
     params = {
         "response_type": "code",
-        "client_id": settings.oidc_client_id,
+        "client_id": settings.client_id,
         "redirect_uri": redirect_uri,
-        "scope": settings.oidc_scopes or "openid",
+        "scope": settings.scopes,
         "state": state,
         "nonce": nonce,
         "code_challenge": _b64url(hashlib.sha256(verifier.encode()).digest()),
@@ -126,17 +187,17 @@ async def oidc_start(request: Request, link: bool = False):
 
 async def _exchange(provider: dict, code: str, flow: dict) -> dict:
     """Trade the code for tokens and return the checked ID token claims (plus userinfo)."""
-    settings = get_settings()
+    settings = get_config()
     data = {"grant_type": "authorization_code", "code": code, "redirect_uri": flow["redirect_uri"],
             "code_verifier": flow["verifier"]}
     auth = None
     methods = provider.get("token_endpoint_auth_methods_supported") or ["client_secret_basic"]
-    if settings.oidc_client_secret and "client_secret_basic" in methods:
-        auth = (settings.oidc_client_id, settings.oidc_client_secret)
+    if settings.client_secret and "client_secret_basic" in methods:
+        auth = (settings.client_id, settings.client_secret)
     else:
-        data["client_id"] = settings.oidc_client_id
-        if settings.oidc_client_secret:
-            data["client_secret"] = settings.oidc_client_secret
+        data["client_id"] = settings.client_id
+        if settings.client_secret:
+            data["client_secret"] = settings.client_secret
     async with httpx.AsyncClient(timeout=15) as client:
         r = await client.post(provider["token_endpoint"], data=data, auth=auth, headers={"Accept": "application/json"})
         if r.status_code != 200:
@@ -150,7 +211,7 @@ async def _exchange(provider: dict, code: str, flow: dict) -> dict:
         audiences = aud if isinstance(aud, list) else [aud]
         if claims.get("iss") != provider["issuer"]:
             raise ValueError(f"ID token from another issuer: {claims.get('iss')}")
-        if settings.oidc_client_id not in audiences or (len(audiences) > 1 and claims.get("azp") not in (None, settings.oidc_client_id)):
+        if settings.client_id not in audiences or (len(audiences) > 1 and claims.get("azp") not in (None, settings.client_id)):
             raise ValueError("ID token meant for another client")
         if not isinstance(claims.get("exp"), (int, float)) or claims["exp"] < time.time() - 60:
             raise ValueError("ID token expired")
@@ -196,6 +257,8 @@ async def oidc_callback(request: Request, code: str = "", state: str = "", error
     except Exception:
         flow = None
     where = "link" if flow and flow.get("link_user") else "login"
+    if not enabled():
+        return _fail(where, "provider")
     if not flow or flow.get("exp", 0) < time.time():
         return _fail(where, "expired")
     if not state or not secrets.compare_digest(state, flow["state"]):
@@ -225,7 +288,7 @@ async def oidc_callback(request: Request, code: str = "", state: str = "", error
         return response
 
     if owner is None or not get_user(owner):
-        if not get_settings().oidc_auto_create:
+        if not get_config().auto_create:
             return _fail("login", "not_linked")
         username = _new_username(claims)
         owner = create_user(username, secrets.token_urlsafe(32))  # a password nobody knows…
@@ -257,7 +320,76 @@ def user_info(user_id: int) -> dict:
     """For /api/auth/me: whether SSO is set up and linked, and whether the user has a password."""
     from database import get_oidc_identity, get_user
     return {
-        "sso": {"enabled": enabled(), "name": get_settings().oidc_name or "SSO",
+        "sso": {"enabled": True, "name": get_config().name,
                 "linked": bool(get_oidc_identity(user_id))} if enabled() else None,
         "has_password": bool((get_user(user_id) or {}).get("password_login", 1)),
     }
+
+
+# --- Settings → Users → Single sign-on (admins) -------------------------------------------------
+
+class ConfigUpdate(BaseModel):
+    enabled: bool
+    issuer: str = ""
+    client_id: str = ""
+    client_secret: Optional[str] = None  # None: keep the saved one; "": remove it
+    name: str = "SSO"
+    scopes: str = "openid profile email"
+    redirect_uri: str = ""
+    auto_create: bool = False
+
+
+def _admin_view(cfg: Config, request: Request) -> dict:
+    data = {k: v for k, v in cfg.__dict__.items() if k != "client_secret"}
+    data["has_secret"] = bool(cfg.client_secret)
+    data["default_redirect_uri"] = _redirect_uri_default(request)
+    return data
+
+
+def _redirect_uri_default(request: Request) -> str:
+    proto = "https" if security.is_https(request) else "http"
+    host = request.headers.get("x-forwarded-host", "").split(",")[0].strip() or request.headers.get("host") or request.url.netloc
+    return f"{proto}://{host}/api/auth/oidc/callback"
+
+
+@router.get("/api/admin/oidc")
+async def oidc_config(request: Request, _: dict = Depends(security.require_admin)):
+    return _admin_view(get_config(), request)
+
+
+@router.put("/api/admin/oidc")
+async def oidc_config_update(body: ConfigUpdate, request: Request, _: dict = Depends(security.require_admin)):
+    """Save the single sign-on settings; turning it on checks that the provider answers."""
+    current = get_config()
+    cfg = Config(
+        enabled=body.enabled, issuer=body.issuer.strip(), client_id=body.client_id.strip(),
+        client_secret=current.client_secret if body.client_secret is None else body.client_secret.strip(),
+        name=body.name.strip()[:40] or "SSO", scopes=" ".join(body.scopes.split()) or "openid profile email",
+        redirect_uri=body.redirect_uri.strip(), auto_create=body.auto_create, source="settings",
+    )
+    if cfg.issuer and not re.match(r"^https?://", cfg.issuer):
+        raise HTTPException(status_code=400, detail="The issuer is a URL, like https://auth.example.com/application/o/ankibase/")
+    if cfg.redirect_uri and not re.match(r"^https?://", cfg.redirect_uri):
+        raise HTTPException(status_code=400, detail="The redirect URI is a full URL")
+    if cfg.enabled:
+        if not cfg.issuer or not cfg.client_id:
+            raise HTTPException(status_code=400, detail="Fill in the issuer and client ID to turn single sign-on on")
+        if "openid" not in cfg.scopes.split():
+            raise HTTPException(status_code=400, detail="The scopes need to include openid")
+        try:
+            await _provider(cfg.issuer, fresh=True)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Couldn't read the provider's configuration at "
+                                f"{cfg.issuer.rstrip('/')}/.well-known/openid-configuration ({e})")
+    _save_config(cfg)
+    return _admin_view(cfg, request)
+
+
+@router.delete("/api/admin/oidc")
+async def oidc_config_reset(request: Request, _: dict = Depends(security.require_admin)):
+    """Forget the settings saved here, going back to .env's OIDC_* variables (if any)."""
+    from database import get_db
+    with get_db() as conn:
+        conn.execute("DELETE FROM settings WHERE key = ?", (SETTING,))
+        conn.commit()
+    return _admin_view(get_config(), request)
