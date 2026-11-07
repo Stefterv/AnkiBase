@@ -452,6 +452,60 @@ Write for a learner: plain words, no long introductions."""
         reply, _, _ = await self.generate_with_provider(prompt, provider, model)
         return reply.strip()
 
+    async def make_quiz(self, content: str, language: Optional[str], gloss_language: str, level: Optional[str] = None,
+                        count: int = 5, provider: Optional[str] = None, model: Optional[str] = None) -> list[dict]:
+        """
+        Multiple-choice questions that check a learner understood the story (not vocabulary drill).
+        Each question: {"q", "options" (4), "answer" (index), "why", "para" (0-based paragraph that answers it)}.
+        Beginners (A1/A2, or no level) get questions in their own language; from B1 on, in the story's.
+        """
+        import random
+        paras = self.story_paragraphs(content)
+        numbered = "\n\n".join(f"[{i}] {p}" for i, p in enumerate(paras))
+        beginner = not level or level.upper()[:2] in ("A1", "A2")
+        q_lang = gloss_language if beginner or not language else language
+        prompt = f"""A language learner{f" at CEFR level {level}" if level else ""} just read this {language or "foreign-language"} story. The paragraphs are numbered.
+
+{numbered}
+
+Write {count} multiple-choice questions that check whether they understood the story: what happens, who does what and why,
+how characters feel, the order of events, and at most one question that needs a little inference. Not vocabulary or grammar
+questions, and nothing that can be answered without reading the story. Go through the whole story, beginning to end.
+
+Rules:
+- Write each question and its options in {q_lang}.
+- Exactly 4 options per question, one clearly correct. Wrong options should be plausible — mention people, places or
+  events from the story — but plainly wrong to someone who understood it.
+- Keep options short and similar in length.
+- "why": one sentence in {gloss_language} explaining the answer, quoting the key words from the story.
+- "para": the number of the paragraph that answers the question.
+
+Reply with JSON only, no prose: {{"questions": [{{"q": "...", "options": ["...", "...", "...", "..."], "answer": <0-3>, "why": "...", "para": <n>}}]}}"""
+        reply, _, _ = await self.generate_with_provider(prompt, provider, model)
+        obj = self._json_object(reply) or {}
+        out = []
+        for item in obj.get("questions") or []:
+            if not isinstance(item, dict):
+                continue
+            q, opts, ans = item.get("q"), item.get("options"), item.get("answer")
+            if not isinstance(q, str) or not q.strip() or not isinstance(opts, list):
+                continue
+            opts = [str(o).strip() for o in opts if str(o).strip()]
+            if len(opts) < 2 or len(set(opts)) != len(opts) or not isinstance(ans, int) or not 0 <= ans < len(opts):
+                continue
+            # Models like to put the answer first; shuffle so its position gives nothing away.
+            correct = opts[ans]
+            random.shuffle(opts)
+            para = item.get("para")
+            out.append({
+                "q": q.strip(),
+                "options": opts,
+                "answer": opts.index(correct),
+                "why": str(item.get("why") or "").strip(),
+                "para": para if isinstance(para, int) and 0 <= para < len(paras) else None,
+            })
+        return out[:count]
+
     async def lookup_word_jisho(self, word: str) -> dict | None:
         """
         Look up a Japanese word using Jisho API (free, no API key needed).

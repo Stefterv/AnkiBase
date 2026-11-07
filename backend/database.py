@@ -294,6 +294,11 @@ def init_account_db(container_name: str):
             cursor.execute("ALTER TABLE stories ADD COLUMN read_at TIMESTAMP")
         except sqlite3.OperationalError:
             pass
+        # A comprehension quiz on the story (Reading → Check your understanding), JSON; NULL until made.
+        try:
+            cursor.execute("ALTER TABLE stories ADD COLUMN quiz TEXT")
+        except sqlite3.OperationalError:
+            pass
         # The profile's story settings, as JSON per key ("daily": the daily story).
         cursor.execute("CREATE TABLE IF NOT EXISTS story_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
 
@@ -643,6 +648,7 @@ def get_story(story_id: int, container_name: Optional[str] = None) -> Optional[d
             result["lookup_fields"] = json.loads(row["lookup_fields"]) if row["lookup_fields"] else ["Meaning"]
             result["word_forms"] = json.loads(row["word_forms"]) if "word_forms" in row.keys() and row["word_forms"] else {}
             result["annotations"] = json.loads(row["annotations"]) if "annotations" in row.keys() and row["annotations"] else None
+            result["quiz"] = json.loads(row["quiz"]) if "quiz" in row.keys() and row["quiz"] else None
             return result
         return None
 
@@ -659,6 +665,7 @@ def get_all_stories(limit: int = 100, offset: int = 0, container_name: Optional[
     db_path = get_account_db_path(container_name)
     if not os.path.exists(db_path):
         return []
+    init_account_db(container_name)  # the list reads newer columns (quiz)
 
     with get_db(db_path) as conn:
         cursor = conn.cursor()
@@ -666,6 +673,8 @@ def get_all_stories(limit: int = 100, offset: int = 0, container_name: Optional[
             """
             SELECT id, name, style, length, language, target_language,
                    provider, model, deck_name, created_at, read_at, level, words,
+                   json_extract(quiz, '$.result.score') as quiz_score,
+                   json_extract(quiz, '$.result.total') as quiz_total,
                    LENGTH(content) as content_length,
                    SUBSTR(content, 1, 400) as preview
             FROM stories
@@ -707,6 +716,18 @@ def set_story_read(story_id: int, read: bool, container_name: Optional[str] = No
             cursor.execute("UPDATE stories SET read_at = COALESCE(read_at, CURRENT_TIMESTAMP) WHERE id = ?", (story_id,))
         else:
             cursor.execute("UPDATE stories SET read_at = NULL WHERE id = ?", (story_id,))
+        conn.commit()
+        return cursor.rowcount > 0
+
+
+def set_story_quiz(story_id: int, quiz: Optional[dict], container_name: Optional[str] = None) -> bool:
+    """Store a story's comprehension quiz (with its last result), or clear it."""
+    db_path = _account_db(container_name)
+    if not db_path:
+        return False
+    with get_db(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE stories SET quiz = ? WHERE id = ?", (json.dumps(quiz) if quiz else None, story_id))
         conn.commit()
         return cursor.rowcount > 0
 

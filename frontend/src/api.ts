@@ -388,7 +388,15 @@ export interface SavedStory {
   preview?: string;
   word_count?: number;
   annotations?: StoryAnnotations | null;
+  quiz?: StoryQuiz | null;
+  /** Last quiz result, in the library list. */
+  quiz_score?: number | null;
+  quiz_total?: number | null;
 }
+
+/** A comprehension question; `para` is the paragraph (0-based) that answers it. */
+export interface QuizQuestion { q: string; options: string[]; answer: number; why?: string; para?: number | null }
+export interface StoryQuiz { questions: QuizQuestion[]; created_at?: string; result?: { score: number; total: number; at: string } }
 
 /** One reading unit of a story: a word or a fixed expression, explained in context. */
 export interface StoryUnit { t: string; l?: string; p?: string; g?: string; n?: string; v?: string }
@@ -409,6 +417,10 @@ export const stories = {
     fetchAPI<{ success: boolean; read_at: string | null }>(`/stories/${id}/read`, { method: 'POST', body: JSON.stringify({ read }) }),
   annotate: (id: number, provider?: string, model?: string) =>
     fetchAPI<{ annotations: StoryAnnotations }>(`/stories/${id}/annotate`, { method: 'POST', body: JSON.stringify({ provider, model }) }),
+  quiz: (id: number, p: { fresh?: boolean; provider?: string; model?: string } = {}) =>
+    fetchAPI<{ quiz: StoryQuiz }>(`/stories/${id}/quiz`, { method: 'POST', body: JSON.stringify(p) }),
+  quizResult: (id: number, score: number, total: number) =>
+    fetchAPI<{ quiz: StoryQuiz }>(`/stories/${id}/quiz/result`, { method: 'PUT', body: JSON.stringify({ score, total }) }),
   explain: (p: { passage: string; context: string; language?: string | null; gloss_language?: string; level?: string | null; provider?: string; model?: string }) =>
     fetchAPI<{ explanation: string }>('/story/explain', { method: 'POST', body: JSON.stringify(p) }),
 };

@@ -16,7 +16,7 @@ from security import require_auth, require_admin, require
 from anki_client import AnkiConnectClient, AnkiError
 from story_generator import StoryGenerator, PROVIDERS, NoValidKeysError
 from database import (
-    save_story, get_story, get_all_stories, delete_story, set_story_read,
+    save_story, get_story, get_all_stories, delete_story, set_story_read, set_story_quiz,
     get_story_setting, set_story_setting,
     get_active_account, get_all_accounts, set_ankiweb_email,
     migrate_to_user_system,
@@ -1215,6 +1215,62 @@ async def mark_story_read(story_id: int, request: StoryReadRequest, _: dict = De
         import daily_story
         daily_story.kick(get_active_account())
     return {"success": True, "read_at": (get_story(story_id) or {}).get("read_at")}
+
+
+def _utc_now() -> str:
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+class QuizRequest(BaseModel):
+    provider: Optional[str] = None
+    model: Optional[str] = None
+    fresh: bool = False  # new questions, even when the story has a quiz
+
+
+@app.post("/api/stories/{story_id}/quiz")
+async def story_quiz_endpoint(story_id: int, request: QuizRequest, _: dict = Depends(require("use_ai"))):
+    """The story's comprehension quiz: the saved one, or new questions written by the AI."""
+    story_row = get_story(story_id)
+    if not story_row:
+        raise HTTPException(status_code=404, detail="Story not found")
+    if story_row.get("quiz") and not request.fresh:
+        return {"quiz": story_row["quiz"]}
+    api_keys = get_api_keys()
+    if not any(api_keys.values()) and not get_custom_endpoint().get("base_url"):
+        raise HTTPException(status_code=400, detail="Add an AI key in Story → AI settings first")
+    lang = (story_row.get("target_language") or (story_row.get("annotations") or {}).get("language")
+            or (story_row.get("language") if story_row.get("language") not in (None, "", "auto") else None))
+    gloss = (story_row.get("annotations") or {}).get("gloss_language") or _gloss_language(
+        story_row.get("lookup_language"), story_row.get("language") if story_row.get("target_language") else None)
+    try:
+        questions = await StoryGenerator(api_keys, get_custom_endpoint()).make_quiz(
+            story_row["content"], lang, gloss, story_row.get("level"), provider=request.provider, model=request.model)
+    except NoValidKeysError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if len(questions) < 2:
+        raise HTTPException(status_code=502, detail="The AI didn't return a usable quiz — try again")
+    quiz = {"questions": questions, "created_at": _utc_now()}
+    set_story_quiz(story_id, quiz)
+    return {"quiz": quiz}
+
+
+class QuizResultRequest(BaseModel):
+    score: int
+    total: int
+
+
+@app.put("/api/stories/{story_id}/quiz/result")
+async def story_quiz_result_endpoint(story_id: int, request: QuizResultRequest, _: dict = Depends(require_auth)):
+    """Remember how the last try at the story's quiz went (shown in the library)."""
+    quiz = (get_story(story_id) or {}).get("quiz")
+    if not quiz:
+        raise HTTPException(status_code=404, detail="This story has no quiz")
+    total = max(1, min(request.total, len(quiz.get("questions") or [])))
+    quiz["result"] = {"score": max(0, min(request.score, total)), "total": total,
+                      "at": _utc_now()}
+    set_story_quiz(story_id, quiz)
+    return {"quiz": quiz}
 
 
 class DailyStoryRequest(BaseModel):

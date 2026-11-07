@@ -13,6 +13,7 @@ import { useSessionSaver } from '../hooks/useSessionSaver';
 import { haptic } from '../native';
 import { Segmented } from './quizlet/ui';
 import { AddCardDialog } from './AddCardDialog';
+import { StoryQuizCard } from './story/Quiz';
 import ReactMarkdown from 'react-markdown';
 import { alignUnits, buildVocab, fold, LANG_CODE, paragraphs, splitLine, stripArticle, type Vocab } from './story/text';
 
@@ -155,6 +156,7 @@ function Library({ onOpen }: { onOpen: (id: number) => void }) {
                   {lang && <span className="px-2 py-0.5 rounded-full bg-white/5 text-(--text-secondary)">{lang}</span>}
                   {s.level && <span className="px-2 py-0.5 rounded-full bg-white/5 text-(--text-secondary)">{s.level}</span>}
                   {s.word_count ? <span className="px-2 py-0.5 rounded-full bg-white/5 text-(--text-secondary)">{s.word_count} words</span> : null}
+                  {s.quiz_total ? <span className="px-2 py-0.5 rounded-full bg-white/5 text-(--text-secondary)" title="Last quiz result">Quiz {s.quiz_score ?? 0}/{s.quiz_total}</span> : null}
                   {s.deck_name && <span className="px-2 py-0.5 rounded-full bg-white/5 text-(--text-secondary) truncate max-w-40">{s.deck_name.split('::').pop()}</span>}
                 </div>
                 <div className="flex items-center gap-3 text-[11px] text-(--text-secondary)">
@@ -428,6 +430,7 @@ function Reader({ id, onBack }: { id: number; onBack: () => void }) {
               </div>
             ))}
           </div>
+          <StoryQuizCard story={story} ai={aiChoice()} onQuiz={q => setStory(s => (s ? { ...s, quiz: q } : s))} onMarkRead={toggleRead} />
           <div className="mt-10 pt-6 border-t border-white/8 flex flex-wrap gap-2">
             {story.read_at ? (
               <button onClick={toggleRead} disabled={marking} className="btn btn-secondary inline-flex items-center gap-2" title="Mark as unread">
