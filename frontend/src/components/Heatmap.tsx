@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { stats, type ReviewHistory } from '../api';
@@ -250,6 +250,7 @@ export function Heatmap({ className = '' }: HeatmapProps) {
 
     const onWheel = (e: WheelEvent) => {
       if (el.scrollWidth <= el.clientWidth) return; // fully visible — let page scroll
+      if (!rafId || Math.abs(target - el.scrollLeft) < 0.5) target = el.scrollLeft; // scrolled some other way
       e.preventDefault(); // has overflow — always block page scroll
       const atLeft  = target <= 0;
       const atRight = target >= el.scrollWidth - el.clientWidth - 1;
@@ -262,6 +263,15 @@ export function Heatmap({ className = '' }: HeatmapProps) {
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => { el.removeEventListener('wheel', onWheel); cancelAnimationFrame(rafId); };
   }, [loading, year]);
+
+  // Narrow screens (phones): open on today rather than January, with the weeks before it.
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    const today = el?.querySelector<HTMLElement>('[data-today]');
+    if (!el || !today || el.scrollWidth <= el.clientWidth) return;
+    // Today near the right edge (a few weeks of room), whatever the scroll was.
+    el.scrollLeft += today.getBoundingClientRect().right - el.getBoundingClientRect().right + squareSize * 3;
+  }, [loading, year, squareSize]);
 
   if (loading) {
     return (
@@ -357,6 +367,7 @@ export function Heatmap({ className = '' }: HeatmapProps) {
                 return (
                   <div
                     key={dayIndex}
+                    data-today={isToday || undefined}
                     className={`rounded-sm cursor-pointer transition-all duration-150 ${
                       isToday ? 'ring-2 ring-(--text-primary) ring-offset-1 ring-offset-(--bg-secondary)' : ''
                     } ${isHovered ? 'scale-125 z-10' : 'hover:scale-110'}`}
