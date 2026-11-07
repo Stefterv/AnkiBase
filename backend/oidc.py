@@ -142,8 +142,16 @@ def _claims(id_token: str) -> dict:
         raise ValueError("The provider sent an unreadable ID token")
 
 
+# The phone apps: the sign-in runs in the system's browser sheet (ASWebAuthenticationSession),
+# which closes when it reaches this address. The app then trades the one-time code, with the
+# secret only it knows (PKCE: the start URL had its SHA-256), for a session (oidc_app_session).
+APP_CALLBACK = "ankibase://sso"
+APP_CODE_SECONDS = 120
+_app_codes: dict[str, tuple[int, str, float]] = {}  # code -> (user id, challenge, expires)
+
+
 def _fail(where: str, code: str) -> RedirectResponse:
-    target = "/settings?tab=account&sso_error=" if where == "link" else "/login?sso_error="
+    target = {"link": "/settings?tab=account&sso_error=", "app": APP_CALLBACK + "?error="}.get(where, "/login?sso_error=")
     response = RedirectResponse(target + code, status_code=303)
     response.delete_cookie(FLOW_COOKIE, path="/api/auth/oidc")
     return response
@@ -156,10 +164,14 @@ async def oidc_info():
 
 
 @router.get("/api/auth/oidc/start")
-async def oidc_start(request: Request, link: bool = False):
-    """Send the browser to the provider. `link`: connect the provider account to the signed-in user."""
+async def oidc_start(request: Request, link: bool = False, app: bool = False, challenge: str = ""):
+    """Send the browser to the provider. `link`: connect the provider account to the signed-in
+    user. `app`: sign in the phone app, which sent the SHA-256 of its secret as `challenge`."""
     if not enabled():
         raise HTTPException(status_code=404, detail="Single sign-on isn't set up")
+    if app and (link or not re.fullmatch(r"[A-Za-z0-9_-]{43}", challenge)):
+        raise HTTPException(status_code=400, detail="The app's sign-in needs a challenge")
+    where = "app" if app else "link" if link else "login"
     user = security.current_user.get()
     if link and not user:
         return _fail("login", "login_first")
@@ -167,7 +179,7 @@ async def oidc_start(request: Request, link: bool = False):
         provider = await _provider()
     except Exception as e:
         print(f"✗ OIDC discovery failed: {e}")
-        return _fail("link" if link else "login", "provider_unreachable")
+        return _fail(where, "provider_unreachable")
     settings = get_config()
     state, nonce, verifier = secrets.token_urlsafe(24), secrets.token_urlsafe(24), secrets.token_urlsafe(48)
     redirect_uri = _redirect_uri(request)
@@ -182,7 +194,8 @@ async def oidc_start(request: Request, link: bool = False):
         "code_challenge_method": "S256",
     }
     flow = {"state": state, "nonce": nonce, "verifier": verifier, "redirect_uri": redirect_uri,
-            "link_user": user["user_id"] if link else None, "exp": time.time() + FLOW_SECONDS}
+            "link_user": user["user_id"] if link else None, "app_challenge": challenge if app else None,
+            "exp": time.time() + FLOW_SECONDS}
     response = RedirectResponse(f"{provider['authorization_endpoint']}?{urlencode(params)}", status_code=303)
     # Encrypted, and only sent back to the callback (SameSite=Lax: the provider's redirect is a top-level GET).
     response.set_cookie(FLOW_COOKIE, security.encrypt(json.dumps(flow)), max_age=FLOW_SECONDS, httponly=True,
@@ -261,7 +274,7 @@ async def oidc_callback(request: Request, code: str = "", state: str = "", error
         flow = json.loads(security.decrypt(raw)) if raw else None
     except Exception:
         flow = None
-    where = "link" if flow and flow.get("link_user") else "login"
+    where = "link" if flow and flow.get("link_user") else "app" if flow and flow.get("app_challenge") else "login"
     if not enabled():
         return _fail(where, "provider")
     if not flow or flow.get("exp", 0) < time.time():
@@ -294,7 +307,7 @@ async def oidc_callback(request: Request, code: str = "", state: str = "", error
 
     if owner is None or not get_user(owner):
         if not get_config().auto_create:
-            return _fail("login", "not_linked")
+            return _fail(where, "not_linked")
         username = _new_username(claims)
         owner = create_user(username, secrets.token_urlsafe(32))  # a password nobody knows…
         set_password_login(owner, False)  # …and password sign-in off for them
@@ -309,12 +322,46 @@ async def oidc_callback(request: Request, code: str = "", state: str = "", error
             set_user_container_permissions(owner, [p for p in cfg.default_profiles if p in known])
         print(f"✓ Made user '{username}' for a single sign-on account")
 
+    if where == "app":
+        now = time.time()
+        for old in [c for c, (_, _, exp) in _app_codes.items() if exp < now]:
+            del _app_codes[old]
+        app_code = secrets.token_urlsafe(32)
+        _app_codes[app_code] = (owner, flow["app_challenge"], now + APP_CODE_SECONDS)
+        response = RedirectResponse(f"{APP_CALLBACK}?{urlencode({'code': app_code})}", status_code=303)
+        response.delete_cookie(FLOW_COOKIE, path="/api/auth/oidc")
+        return response
+
     from main import sessions
     session_id = secrets.token_urlsafe(32)
     sessions[session_id] = {"user_id": owner}
     response = RedirectResponse("/", status_code=303)
     security.set_session_cookie(response, request, session_id)
     response.delete_cookie(FLOW_COOKIE, path="/api/auth/oidc")
+    return response
+
+
+class AppSessionRequest(BaseModel):
+    code: str
+    verifier: str
+
+
+@router.post("/api/auth/oidc/app-session")
+async def oidc_app_session(body: AppSessionRequest, request: Request):
+    """The phone app's half of an app sign-in: its one-time code and secret for a session cookie
+    (which the app's engine keeps, as after a password login)."""
+    from fastapi.responses import JSONResponse
+    entry = _app_codes.pop(body.code, None)  # one try per code
+    if not entry or entry[2] < time.time():
+        raise HTTPException(status_code=400, detail="This sign-in expired, try again")
+    owner, challenge, _ = entry
+    if not secrets.compare_digest(_b64url(hashlib.sha256(body.verifier.encode()).digest()), challenge):
+        raise HTTPException(status_code=400, detail="This sign-in couldn't be verified, try again")
+    from main import sessions
+    session_id = secrets.token_urlsafe(32)
+    sessions[session_id] = {"user_id": owner}
+    response = JSONResponse({"success": True})
+    security.set_session_cookie(response, request, session_id)
     return response
 
 

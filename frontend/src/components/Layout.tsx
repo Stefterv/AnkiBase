@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useNavigate, Link, useLocation } from 'react-router-dom';
-import { BookOpen, Search, Sparkles, RefreshCw, LogOut, Layers, X, Upload, BarChart3, Library, Menu, Settings, CheckCircle, AlertCircle, CloudOff, ChevronDown } from 'lucide-react';
+import { BookOpen, Search, Sparkles, RefreshCw, LogIn, LogOut, Layers, X, Upload, BarChart3, Library, Menu, Settings, CheckCircle, AlertCircle, CloudOff, ChevronDown } from 'lucide-react';
 import { auth, update, type User } from '../api';
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -261,6 +261,14 @@ export function Layout() {
               <Settings className="w-4 h-4" />
               <span className="hidden sm:inline">{t('settings.title')}</span>
             </Link>
+
+            {/* The app on its own (no server): sign in to one, with a password or single sign-on. */}
+            {isNative && app && !app.server && (
+              <Link to="/login" className="btn btn-primary header-btn flex items-center gap-2" title="Log in to an AnkiBase server">
+                <LogIn className="w-4 h-4" />
+                <span>Log in</span>
+              </Link>
+            )}
 
             {!isNative && (
               <button

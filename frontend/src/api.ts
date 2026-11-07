@@ -94,6 +94,9 @@ export const auth = {
   /** Whether the server offers single sign-on, and its name (no login needed). */
   sso: () => fetchAPI<{ enabled: boolean; name: string }>('/auth/oidc'),
   unlinkSso: () => fetchAPI<{ success: boolean }>('/auth/oidc/link', { method: 'DELETE' }),
+  /** The phone app's sign-in: the one-time code and secret from the sign-in sheet, for a session. */
+  ssoAppSession: (code: string, verifier: string) =>
+    fetchAPI<{ success: boolean }>('/auth/oidc/app-session', { method: 'POST', body: JSON.stringify({ code, verifier }) }),
   changePassword: (currentPassword: string, newPassword: string) =>
     fetchAPI<{ success: boolean; message: string }>('/auth/change-password', {
       method: 'POST',

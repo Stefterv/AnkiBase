@@ -1,3 +1,5 @@
+import AuthenticationServices
+import CryptoKit
 import SwiftUI
 import WebKit
 
@@ -94,7 +96,8 @@ struct WebAppView: UIViewRepresentable {
         """
     }
 
-    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler, UITabBarDelegate {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler, UITabBarDelegate,
+                             ASWebAuthenticationPresentationContextProviding {
         let handler = AppSchemeHandler()
         weak var web: WKWebView?
         let tabBar = UITabBar()
@@ -169,6 +172,8 @@ struct WebAppView: UIViewRepresentable {
                 StoryAlerts.shared.pageReady()
             case "story-alerts":
                 StoryAlerts.shared.requestPermission()
+            case "sso":
+                if let start = (body["url"] as? String).flatMap(URL.init(string:)) { signIn(start) }
             default:
                 break
             }
@@ -179,6 +184,57 @@ struct WebAppView: UIViewRepresentable {
             guard let data = try? JSONSerialization.data(withJSONObject: detail) else { return }
             let json = String(decoding: data, as: UTF8.self)
             web?.evaluateJavaScript("window.dispatchEvent(new CustomEvent('\(event)', {detail: \(json)}))")
+        }
+
+        // MARK: Single sign-on (native.ts startSso, backend/oidc.py)
+
+        private var signInSession: ASWebAuthenticationSession?
+
+        /// Sign in with the server's provider in the system's browser sheet. It closes on the
+        /// server's `ankibase://sso?code=…`; the page then trades the code and this secret for a
+        /// session through the engine, which keeps the cookie. Only the SHA-256 of the secret
+        /// travels through the browser (PKCE), so a code caught on the way is no use alone.
+        private func signIn(_ start: URL) {
+            guard signInSession == nil, var parts = URLComponents(url: start, resolvingAgainstBaseURL: false) else { return }
+            var bytes = [UInt8](repeating: 0, count: 32)
+            guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else { return }
+            let verifier = Self.base64url(Data(bytes))
+            let challenge = Self.base64url(Data(SHA256.hash(data: Data(verifier.utf8))))
+            parts.queryItems = (parts.queryItems ?? []) + [URLQueryItem(name: "app", value: "true"),
+                                                           URLQueryItem(name: "challenge", value: challenge)]
+            guard let url = parts.url else { return }
+            let session = ASWebAuthenticationSession(url: url, callbackURLScheme: AppSchemeHandler.scheme) { [weak self] callback, error in
+                DispatchQueue.main.async {
+                    self?.signInSession = nil
+                    let query = callback.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems } ?? []
+                    let value = { (name: String) in query.first { $0.name == name }?.value }
+                    if let code = value("code") {
+                        self?.send("ankibase-sso", ["code": code, "verifier": verifier])
+                    } else if let failure = value("error") {
+                        self?.send("ankibase-sso", ["error": failure])
+                    } else {
+                        let cancelled = (error as? ASWebAuthenticationSessionError)?.code == .canceledLogin
+                        self?.send("ankibase-sso", ["error": cancelled ? "cancelled" : "provider_unreachable"])
+                    }
+                }
+            }
+            session.presentationContextProvider = self
+            // Shares Safari's cookies, so a provider you're signed in to doesn't ask again.
+            session.prefersEphemeralWebBrowserSession = false
+            signInSession = session
+            if !session.start() {
+                signInSession = nil
+                send("ankibase-sso", ["error": "provider_unreachable"])
+            }
+        }
+
+        func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+            web?.window ?? ASPresentationAnchor()
+        }
+
+        private static func base64url(_ data: Data) -> String {
+            data.base64EncodedString().replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_")
+                .replacingOccurrences(of: "=", with: "")
         }
 
         // MARK: Navigation

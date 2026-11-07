@@ -262,6 +262,19 @@ export function onNativeOpen(handler: (path: string) => void) {
   return () => window.removeEventListener('ankibase-open', listener);
 }
 
+/** Single sign-on in the iPhone app: it opens `startUrl` (the server's /api/auth/oidc/start) in
+ *  the system's browser sheet, and answers with an `ankibase-sso` event: the one-time code and
+ *  the app's secret to trade for a session (auth.ssoAppSession), or an error. */
+export const canSsoInApp = isIOS;
+export function startSso(startUrl: string) {
+  if (isIOS) post({ type: 'sso', url: startUrl });
+}
+export function onNativeSso(handler: (result: { code?: string; verifier?: string; error?: string }) => void) {
+  const listener = (event: Event) => handler((event as CustomEvent).detail ?? {});
+  window.addEventListener('ankibase-sso', listener);
+  return () => window.removeEventListener('ankibase-sso', listener);
+}
+
 /** The daily story was turned on: the iPhone app asks to notify when one's ready. */
 export function requestStoryAlerts() {
   if (isIOS) post({ type: 'story-alerts' });
