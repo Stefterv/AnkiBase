@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useNavigate, Link, useLocation } from 'react-router-dom';
-import { BookOpen, Search, Sparkles, RefreshCw, LogIn, LogOut, Layers, X, Upload, BarChart3, Library, Menu, Settings, CheckCircle, AlertCircle, CloudOff, ChevronDown } from 'lucide-react';
+import { BookOpen, Search, Sparkles, RefreshCw, LogIn, Layers, X, Upload, BarChart3, Library, Menu, Settings, CheckCircle, AlertCircle, CloudOff, ChevronDown } from 'lucide-react';
 import { auth, update, type User } from '../api';
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -200,11 +200,6 @@ export function Layout() {
     if (!isNative) update.check().then(r => { if (r.has_update) setHasUpdate(true); setDockerInstall(!!r.docker); }).catch(() => {});
   }, []);
 
-  const handleLogout = async () => {
-    await auth.logout();
-    navigate('/login');
-  };
-
   const pending = app?.pending ?? 0;
 
   return (
@@ -287,17 +282,6 @@ export function Layout() {
               <button onClick={openLogin} className="btn btn-primary header-btn w-9 !px-0 shrink-0 flex items-center justify-center"
                 title="Log in" aria-label="Log in">
                 <LogIn className="w-4 h-4" />
-              </button>
-            )}
-
-            {!isNative && (
-              <button
-                onClick={handleLogout}
-                className="btn btn-secondary header-btn hidden sm:flex items-center gap-2"
-                title={t('common.logout')}
-              >
-                <LogOut className="w-4 h-4" />
-                <span className="hidden sm:inline">{t('common.logout')}</span>
               </button>
             )}
           </div>
