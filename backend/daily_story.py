@@ -10,7 +10,7 @@ import asyncio
 import os
 import random
 import time
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 from zoneinfo import ZoneInfo
 
@@ -68,39 +68,45 @@ def pick_quizlet(data: dict, starred_first: bool, missed_first: bool, count: int
     return out
 
 
-def _today(tz: str) -> date:
+def _today(tz: str, rollover: int) -> date:
+    """Today in `tz`, the day starting at the collection's "next day starts at" hour."""
     try:
         zone = ZoneInfo(tz)
     except Exception:
         zone = timezone.utc
-    return datetime.now(zone).date()
+    return (datetime.now(zone) - timedelta(hours=rollover)).date()
 
 
-def _day_of(created_at: str, tz: str) -> Optional[date]:
+def _day_of(created_at: str, tz: str, rollover: int) -> Optional[date]:
     """The local day of a stored UTC timestamp ("YYYY-MM-DD HH:MM:SS")."""
     try:
         when = datetime.fromisoformat(str(created_at)).replace(tzinfo=timezone.utc)
-        return when.astimezone(ZoneInfo(tz)).date()
+        return (when.astimezone(ZoneInfo(tz)) - timedelta(hours=rollover)).date()
     except Exception:
         return None
 
 
-def _due(container: str) -> Optional[dict]:
-    """The daily settings if a story should be written now: it's on, nothing was written
-    today, and the newest story has been read (or there's none)."""
+def _enabled(container: str) -> Optional[dict]:
+    """The daily settings when the daily story is on."""
     if not os.path.exists(get_account_db_path(container)):
         return None
     config = get_story_setting("daily", container)
     if not config or not config.get("enabled") or not config.get("recipe"):
         return None
+    return config
+
+
+def _due(container: str, config: dict, rollover: int) -> bool:
+    """A story should be written now: nothing was written today, and the newest story has
+    been read (or there's none)."""
     tz = config.get("tz") or "UTC"
     newest = latest_story(container)
     if newest:
-        if _day_of(newest["created_at"], tz) == _today(tz):
-            return None
+        if _day_of(newest["created_at"], tz, rollover) == _today(tz, rollover):
+            return False
         if not newest["read_at"]:
-            return None
-    return config
+            return False
+    return True
 
 
 async def _request_for(config: dict, user: dict):
@@ -152,8 +158,16 @@ async def run(account: dict, force: bool = False) -> None:
     token = current_profile.set(account)
     _running.add(container)
     try:
-        config = _due(container)
+        config = _enabled(container)
         if not config:
+            return
+        import stats_engine as se
+        from main import get_anki_client
+        try:
+            rollover = await se.rollover_hour(get_anki_client())
+        except Exception:  # Anki not ready: its default
+            rollover = se.ROLLOVER_HOURS
+        if not _due(container, config, rollover):
             return
         _last_try[container] = time.time()
         # Whoever turned it on must still be allowed to use the AI on this profile.

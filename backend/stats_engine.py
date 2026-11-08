@@ -9,7 +9,7 @@ Data comes from AnkiConnect and is cached per Anki account:
   * the review log — fetched incrementally by review id.
 
 Aggregation is pure Python over those caches, bucketed into days in the viewer's
-timezone with Anki's default 4am day rollover.
+timezone, with the collection's "next day starts at" hour (Anki's default: 4am).
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 from zoneinfo import ZoneInfo
 
-ROLLOVER_HOURS = 4          # Anki's default "next day starts at"
+ROLLOVER_HOURS = 4          # Anki's default "next day starts at", when the collection has none
 MATURE_IVL = 21             # days; Anki's young/mature threshold
 INFO_BATCH = 500
 CARD_FIELDS = ("deckName", "type", "queue", "due", "interval", "factor", "reps", "lapses", "mod")
@@ -145,22 +145,34 @@ async def _refresh_today_due(client, cache: CollectionCache):
 PERIODS = {"1m": 30, "3m": 91, "1y": 365, "all": None}
 
 
-class DayClock:
-    """Maps timestamps to Anki 'days' in the viewer's timezone (4am rollover)."""
+async def rollover_hour(client) -> int:
+    """The collection's "next day starts at" hour (Anki's Preferences, synced with Anki
+    Desktop and AnkiWeb); Anki's default when it has none or Anki can't be reached."""
+    try:
+        value = await client.rpc("config.get", key="rollover")
+        hour = int(value)
+        return hour if 0 <= hour <= 23 else ROLLOVER_HOURS
+    except Exception:
+        return ROLLOVER_HOURS
 
-    def __init__(self, tz_name: str):
+
+class DayClock:
+    """Maps timestamps to Anki 'days' in the viewer's timezone, starting at `rollover`."""
+
+    def __init__(self, tz_name: str, rollover: int = ROLLOVER_HOURS):
         try:
             self.tz = ZoneInfo(tz_name)
         except Exception:
             self.tz = timezone.utc
+        self.rollover = rollover
         now = datetime.now(self.tz)
-        self.today = (now - timedelta(hours=ROLLOVER_HOURS)).date()
+        self.today = (now - timedelta(hours=rollover)).date()
         # Seconds until the next rollover — used for intraday learning cards.
-        nxt = datetime.combine(self.today + timedelta(days=1), datetime.min.time(), self.tz) + timedelta(hours=ROLLOVER_HOURS)
+        nxt = datetime.combine(self.today + timedelta(days=1), datetime.min.time(), self.tz) + timedelta(hours=rollover)
         self.next_rollover = nxt.timestamp()
 
     def day(self, epoch_s: float):
-        return (datetime.fromtimestamp(epoch_s, self.tz) - timedelta(hours=ROLLOVER_HOURS)).date()
+        return (datetime.fromtimestamp(epoch_s, self.tz) - timedelta(hours=self.rollover)).date()
 
     def hour(self, epoch_s: float) -> int:
         return datetime.fromtimestamp(epoch_s, self.tz).hour

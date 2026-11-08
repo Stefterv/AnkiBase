@@ -150,9 +150,11 @@ export function setReminders(next: Omit<ReminderSettings, 'denied'>, strings: Re
   });
 }
 
-// What's behind changes with a sync (reviews done on other devices): count again.
+// What's behind changes with a sync (reviews done on other devices), and when the day starts
+// (Settings → Study; dayStart.ts): count again.
 if (canRemind && typeof window !== 'undefined') {
   window.addEventListener('anki-sync-complete', () => post({ type: 'reminders-refresh' }));
+  window.addEventListener('ankibase-day-start-changed', () => post({ type: 'reminders-refresh' }));
 }
 
 /** A light tap, for answering cards and toggles. */

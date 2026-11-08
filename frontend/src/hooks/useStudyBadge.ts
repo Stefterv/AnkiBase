@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { decks } from '../api';
+import { DAY_START_CHANGED } from '../dayStart';
 import { quizletToday } from '../quizletToday';
 import { hiddenFromStudy, onHiddenFromStudyChange } from '../studyShows';
 
@@ -29,6 +30,7 @@ export function useStudyBadge(studying: boolean): number {
     refresh();
     const onVisible = () => { if (document.visibilityState === 'visible') refresh(); };
     window.addEventListener('anki-sync-complete', refresh);
+    window.addEventListener(DAY_START_CHANGED, refresh);
     const offShows = onHiddenFromStudyChange(refresh);
     document.addEventListener('visibilitychange', onVisible);
     // Back from studying.
@@ -36,6 +38,7 @@ export function useStudyBadge(studying: boolean): number {
     return () => {
       live = false;
       window.removeEventListener('anki-sync-complete', refresh);
+      window.removeEventListener(DAY_START_CHANGED, refresh);
       offShows();
       window.removeEventListener('ankibase-studied', refresh);
       document.removeEventListener('visibilitychange', onVisible);

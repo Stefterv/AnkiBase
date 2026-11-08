@@ -2,6 +2,7 @@ import sqlite3
 import json
 import os
 import time
+from datetime import datetime
 from typing import Optional
 from contextlib import contextmanager
 import bcrypt
@@ -1305,13 +1306,18 @@ def toggle_quizlet_favorite(card_id: int, deck_id: int) -> bool:
         conn.commit()
         return True
 
-def get_quizlet_deck_stats(deck_id: int) -> dict:
+def get_quizlet_deck_stats(deck_id: int, since: Optional[datetime] = None) -> dict:
+    """Answers today: since `since` (UTC; when the viewer's day started), else since UTC midnight."""
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("""
-            SELECT COUNT(*) FROM quizlet_reviews
-            WHERE deck_id = ? AND date(reviewed_at) = date('now')
-        """, (deck_id,))
+        if since:
+            cursor.execute("SELECT COUNT(*) FROM quizlet_reviews WHERE deck_id = ? AND reviewed_at >= ?",
+                           (deck_id, since.strftime("%Y-%m-%d %H:%M:%S")))
+        else:
+            cursor.execute("""
+                SELECT COUNT(*) FROM quizlet_reviews
+                WHERE deck_id = ? AND date(reviewed_at) = date('now')
+            """, (deck_id,))
         return {"studied_today": cursor.fetchone()[0]}
 
 def update_quizlet_card(card_id: int, deck_id: int, front: str, back: str, image) -> bool:

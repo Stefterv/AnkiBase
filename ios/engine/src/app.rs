@@ -541,7 +541,7 @@ fn normalize_server(url: &str) -> Option<String> {
 
 /// Routes the collection answers (so a closed collection is an error, not the server's).
 fn is_anki_route(path: &str) -> bool {
-    ["/api/decks", "/api/review/", "/api/media", "/api/notes/", "/api/import", "/api/sync", "/api/ankiweb/", "/api/cards/"]
+    ["/api/decks", "/api/review/", "/api/media", "/api/notes/", "/api/import", "/api/sync", "/api/ankiweb/", "/api/cards/", "/api/collection/"]
         .iter()
         .any(|prefix| path.starts_with(prefix))
 }

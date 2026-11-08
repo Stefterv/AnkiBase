@@ -192,6 +192,27 @@ impl Engine {
         Ok(json!({"days": days}))
     }
 
+    // Preferences --------------------------------------------------------------------
+
+    /// Anki's "Next day starts at" hour (its Preferences, synced with Anki Desktop and
+    /// AnkiWeb). Due counts, Stats and the reminders follow it.
+    pub fn rollover(&mut self) -> Outcome<u32> {
+        Ok(self.col()?.get_preferences()?.scheduling.map_or(4, |s| s.rollover))
+    }
+
+    pub fn set_rollover(&mut self, hour: u32) -> Outcome<()> {
+        if hour > 23 {
+            return Err(Failure::new(422, "The day starts at an hour from 0 to 23"));
+        }
+        let col = self.col()?;
+        let mut preferences = col.get_preferences()?;
+        if let Some(scheduling) = preferences.scheduling.as_mut() {
+            scheduling.rollover = hour;
+        }
+        col.set_preferences(preferences)?;
+        Ok(())
+    }
+
     // Studying -----------------------------------------------------------------------
 
     /// The next card in `deck` as Anki's reviewer would show it, with the day's counts.

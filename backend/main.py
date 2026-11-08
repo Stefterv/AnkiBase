@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, Depends, Request, Response, UploadFi
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 import secrets
 import os
@@ -2359,8 +2359,16 @@ async def quizlet_rename_deck(deck_id: int, request: QuizletRenameRequest, _: st
 
 
 @app.get("/api/quizlet/decks/{deck_id}/stats")
-async def quizlet_get_deck_stats(deck_id: int, _: str = Depends(require_auth)):
-    return get_quizlet_deck_stats(deck_id)
+async def quizlet_get_deck_stats(deck_id: int, since: str = "", _: str = Depends(require_auth)):
+    """`since`: when the viewer's day started (ISO 8601), for "studied today"; UTC midnight without it."""
+    from datetime import datetime, timezone
+    start = None
+    if since:
+        try:
+            start = datetime.fromisoformat(since.replace("Z", "+00:00")).astimezone(timezone.utc)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid since")
+    return get_quizlet_deck_stats(deck_id, start)
 
 
 @app.get("/api/quizlet/decks/{deck_id}/favorites")
@@ -2701,6 +2709,28 @@ async def rename_deck(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# When the day starts: Anki's "Next day starts at" preference for the collection (synced
+# with Anki Desktop and AnkiWeb). Due cards, Stats and the daily Quizlet session follow it.
+class RolloverUpdate(BaseModel):
+    hour: int = Field(ge=0, le=23)
+
+
+@app.get("/api/collection/rollover")
+async def get_rollover(client: AnkiConnectClient = Depends(get_anki_client), _: dict = Depends(require_auth)):
+    import stats_engine as se
+    return {"hour": await se.rollover_hour(client)}
+
+
+@app.put("/api/collection/rollover")
+async def set_rollover(request: RolloverUpdate, client: AnkiConnectClient = Depends(get_anki_client),
+                       _: dict = Depends(require_auth)):
+    try:
+        await client.rpc("preferences.set", preferences={"scheduling": {"rollover": request.hour}})
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Couldn't reach Anki: {e}")
+    return {"hour": request.hour}
+
+
 # Stats HTML endpoint
 # Full statistics (Anki's stats screen + Quizlet) for the Stats tab
 @app.get("/api/stats/overview")
@@ -2719,7 +2749,7 @@ async def stats_overview(
     if period not in se.PERIODS:
         raise HTTPException(status_code=400, detail="Invalid period")
     period_days = se.PERIODS[period]
-    clock = se.DayClock(tz)
+    clock = se.DayClock(tz, await se.rollover_hour(client))
     quizlet_set = int(quizlet) if quizlet.isdigit() else None
     use_anki = anki and quizlet_set is None
     use_quizlet = quizlet != "none" and not deck
@@ -2727,7 +2757,7 @@ async def stats_overview(
     result: dict = {
         "today": clock.today.isoformat(),
         "period": period,
-        "rollover_hours": se.ROLLOVER_HOURS,
+        "rollover_hours": clock.rollover,
         "anki": None,
         "anki_error": None,
         "quizlet": None,

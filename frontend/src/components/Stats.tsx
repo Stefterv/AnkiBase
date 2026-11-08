@@ -147,7 +147,7 @@ export function Stats() {
           </div>
           {qz && <QuizletInsights quizlet={qz} />}
           <p className="text-xs text-(--text-secondary) text-center">
-            Days start at {data.rollover_hours}:00 (Anki’s default) in your timezone · Mature = interval of 21+ days
+            Days start at {data.rollover_hours}:00 in your timezone (Settings → Study) · Mature = interval of 21+ days
           </p>
         </div>
       )}

@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { BookOpen, Clock, Plus, Pencil, Trash2, ChevronRight, FolderOpen, X, ExternalLink, TrendingUp, Star, Layers, SlidersHorizontal } from 'lucide-react';
 import { AnkiPageModal } from './AnkiPage';
 import { decks, quizlet, type DeckStats, type QuizletDeck } from '../api';
+import { todayStart } from '../dayStart';
 import { Heatmap } from './Heatmap';
 import { hasServer, useAppStatus } from '../native';
 import { Toggle } from './quizlet/ui';
@@ -57,7 +58,7 @@ export function Decks() {
     loadDecks();
     quizlet.listDecks().then(r => {
       setQuizletDecks(r.decks);
-      Promise.all(r.decks.map(d => quizlet.deckStats(d.id).then(s => [d.id, s.studied_today] as const)))
+      todayStart().then(since => Promise.all(r.decks.map(d => quizlet.deckStats(d.id, since).then(s => [d.id, s.studied_today] as const))))
         .then(entries => setQuizletStats(Object.fromEntries(entries)))
         .catch(() => {});
     }).catch(() => {});

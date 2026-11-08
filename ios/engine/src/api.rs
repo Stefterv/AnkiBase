@@ -38,6 +38,11 @@ struct Fields {
 }
 
 #[derive(Deserialize)]
+struct Rollover {
+    hour: u32,
+}
+
+#[derive(Deserialize)]
 struct FrontBack {
     front: String,
     back: String,
@@ -107,6 +112,10 @@ pub fn handle(engine: &mut Engine, request: &Request) -> Option<Reply> {
             .map(|_| json!({"success": true, "message": "Logged in"})),
         ("GET", ["ankiweb", "status"]) => Ok(engine.status()),
         ("DELETE", ["ankiweb", "credentials"]) => engine.logout().map(|_| json!({"success": true})),
+        // Anki's "Next day starts at" (Settings → Study).
+        ("GET", ["collection", "rollover"]) => engine.rollover().map(|hour| json!({"hour": hour})),
+        ("PUT", ["collection", "rollover"]) => body::<Rollover>(data)
+            .and_then(|r| engine.set_rollover(r.hour).map(|_| json!({"hour": r.hour}))),
         _ => return None,
     };
     Some(match result {

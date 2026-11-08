@@ -19,6 +19,7 @@ import BlocksIcon     from '../assets/icons/brand-blocks.svg?react';
 import BlastIcon      from '../assets/icons/brand-blast.svg?react';
 import MatchIcon      from '../assets/icons/brand-match.svg?react';
 import { quizlet, studySessions, type QuizletCard } from '../api';
+import { todayStart } from '../dayStart';
 import { useSessionSaver } from '../hooks/useSessionSaver';
 import { shuffle } from './quizlet/shared';
 import { Toggle } from './quizlet/ui';
@@ -345,7 +346,7 @@ export function QuizletStudy() {
 
   useEffect(() => {
     Promise.all([
-      quizlet.getDeck(deckId), quizlet.deckStats(deckId), quizlet.getFavorites(deckId),
+      quizlet.getDeck(deckId), todayStart().then(since => quizlet.deckStats(deckId, since)), quizlet.getFavorites(deckId),
       studySessions.get<FlashcardsSaved>('quizlet-flashcards', deckId).catch(() => ({ session: null })),
     ]).then(([deck, stats, favs, fc]) => {
       setTitle(deck.title);

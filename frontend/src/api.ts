@@ -718,6 +718,13 @@ export interface StatsOverview {
   quizlet: QuizletStats | null;
 }
 
+/** The collection: Anki's "Next day starts at" hour (Settings → Study). */
+export const collection = {
+  rollover: () => fetchAPI<{ hour: number }>('/collection/rollover'),
+  setRollover: (hour: number) =>
+    fetchAPI<{ hour: number }>('/collection/rollover', { method: 'PUT', body: JSON.stringify({ hour }) }),
+};
+
 export const stats = {
   overview: (p: { deck?: string; anki?: boolean; quizlet?: string; period: StatsPeriod; refresh?: boolean }) => {
     const q = new URLSearchParams({
@@ -866,8 +873,9 @@ export const quizlet = {
       method: 'PATCH',
       body: JSON.stringify({ title }),
     }),
-  deckStats: (id: number) =>
-    fetchAPI<{ studied_today: number }>(`/quizlet/decks/${id}/stats`),
+  /** `since`: when today started (see dayStart.ts), so "studied today" follows it. */
+  deckStats: (id: number, since?: Date) =>
+    fetchAPI<{ studied_today: number }>(`/quizlet/decks/${id}/stats${since ? `?since=${encodeURIComponent(since.toISOString())}` : ''}`),
   review: (deckId: number, cardId: number, ease: number) =>
     fetchAPI<{ success: boolean }>(`/quizlet/decks/${deckId}/review`, {
       method: 'POST',
