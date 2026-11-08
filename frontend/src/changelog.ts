@@ -10,7 +10,7 @@ export const CHANGELOG: ChangelogDay[] = [
   {
     date: '2026-11-08',
     changes: [
-      'Show in Study now syncs: decks, sets and stories you hide from Study are hidden on all your devices.',
+      'Show in Study now syncs: decks, sets and stories you hide from Study are hidden on all your devices, and on iPhone they no longer count for the app icon’s badge or the daily reminder.',
       'Settings → What’s new: this list of changes.',
       'Settings → Study: choose when the next day starts. It’s Anki’s own setting, so it syncs with Anki Desktop and AnkiWeb, and Stats, the daily story, “studied today” and the daily Quizlet session all follow it.',
     ],

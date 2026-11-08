@@ -41,6 +41,8 @@ function save() {
   enqueue(async () => {
     await collection.setStudyHidden(hiddenFromStudy());
     write(PENDING, null);
+    // In the collection now: the iPhone app counts its icon's badge and reminders again.
+    window.dispatchEvent(new CustomEvent('ankibase-study-hidden-saved'));
   });
 }
 

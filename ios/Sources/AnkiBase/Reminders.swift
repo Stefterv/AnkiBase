@@ -156,7 +156,15 @@ final class Reminders {
             let at: String?
             let set: QuizletSet?
         }
-        guard let data = get("/api/quizlet/last-studied"),
+        // Only the sets Study shows ("Show in Study", kept in the collection).
+        struct Hidden: Decodable {
+            struct Ids: Decodable { let quizlet: [Int] }
+            let hidden: Ids?
+        }
+        let hidden = get("/api/collection/study-hidden")
+            .flatMap { try? JSONDecoder().decode(Hidden.self, from: $0) }?.hidden?.quizlet ?? []
+        let exclude = hidden.map(String.init).joined(separator: ",")
+        guard let data = get("/api/quizlet/last-studied" + (exclude.isEmpty ? "" : "?exclude=\(exclude)")),
               let answer = try? JSONDecoder().decode(Answer.self, from: data),
               answer.has_sets, let set = answer.set else { return nil }
         let last = answer.at.flatMap { ISO8601DateFormatter().date(from: $0) }

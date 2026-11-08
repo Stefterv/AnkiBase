@@ -167,8 +167,10 @@ impl Engine {
 
     /// The top-level decks that are behind (reviews or learning cards due) on each of the
     /// next `days` Anki days, if nothing is studied in between: the app's badge and daily
-    /// reminders. Each day says when it starts (its rollover, as a Unix time).
+    /// reminders. Each day says when it starts (its rollover, as a Unix time). Decks hidden
+    /// with "Show in Study" don't count, as on the Study page.
     pub fn behind(&mut self, days: u32) -> Outcome<Value> {
+        let hidden = self.study_hidden()?.unwrap_or_default().anki;
         let col = self.col()?;
         let next_day_at = col.timing_today()?.next_day_at.0;
         // With today's counts (new cards left within the daily limit).
@@ -177,7 +179,7 @@ impl Engine {
         // cards count too (they have no due date): today when today's limit has some left,
         // else tomorrow when the deck has new cards at all.
         let mut first = Vec::new();
-        for deck in &tree.children {
+        for deck in tree.children.iter().filter(|deck| !hidden.contains(&deck.deck_id)) {
             let in_deck = || SearchNode::DeckIdWithChildren(DeckId(deck.deck_id));
             let mut behind_on = None;
             for day in 0..days {
