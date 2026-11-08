@@ -3,7 +3,7 @@
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
 
-use crate::engine::{Engine, Failure, Outcome};
+use crate::engine::{Engine, Failure, Outcome, StudyHidden};
 use crate::http::{mime_type, Reply, Request};
 
 #[derive(Deserialize)]
@@ -116,6 +116,10 @@ pub fn handle(engine: &mut Engine, request: &Request) -> Option<Reply> {
         ("GET", ["collection", "rollover"]) => engine.rollover().map(|hour| json!({"hour": hour})),
         ("PUT", ["collection", "rollover"]) => body::<Rollover>(data)
             .and_then(|r| engine.set_rollover(r.hour).map(|_| json!({"hour": r.hour}))),
+        // "Show in Study": what's hidden from Study, synced with the collection.
+        ("GET", ["collection", "study-hidden"]) => engine.study_hidden().map(|hidden| json!({"hidden": hidden})),
+        ("PUT", ["collection", "study-hidden"]) => body::<StudyHidden>(data)
+            .and_then(|hidden| engine.set_study_hidden(&hidden).map(|_| json!({"hidden": hidden}))),
         _ => return None,
     };
     Some(match result {

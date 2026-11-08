@@ -11,9 +11,23 @@ use anki::scheduler::answering::{CardAnswer, Rating};
 use anki::search::{JoinSearches, PropertyKind, SearchNode, SortMode, StateKind};
 use anki::sync::collection::normal::SyncActionRequired;
 use anki::sync::login::{sync_login, SyncAuth};
+use anki::services::ConfigService;
 use anki_proto::decks::DeckTreeNode;
+use anki_proto::generic;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+
+/// The collection config key for what's hidden from Study (the server uses the same one).
+const STUDY_HIDDEN_KEY: &str = "ankibase_study_hidden";
+
+/// Anki decks, stories and Quizlet sets hidden from Study, by id.
+#[derive(Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct StudyHidden {
+    pub anki: Vec<i64>,
+    pub stories: Vec<i64>,
+    pub quizlet: Vec<i64>,
+}
 
 /// An error with the HTTP status AnkiBase's server would answer with.
 #[derive(Debug)]
@@ -210,6 +224,22 @@ impl Engine {
             scheduling.rollover = hour;
         }
         col.set_preferences(preferences)?;
+        Ok(())
+    }
+
+    /// What's hidden from Study ("Show in Study"), kept in the collection's config so it
+    /// syncs to every device. None until something was saved.
+    pub fn study_hidden(&mut self) -> Outcome<Option<StudyHidden>> {
+        let key = generic::String { val: STUDY_HIDDEN_KEY.into() };
+        match self.col()?.get_config_json(key) {
+            Ok(json) => Ok(serde_json::from_slice(&json.json).ok()),
+            Err(AnkiError::NotFound { .. }) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    pub fn set_study_hidden(&mut self, hidden: &StudyHidden) -> Outcome<()> {
+        self.col()?.set_config_json(STUDY_HIDDEN_KEY, hidden, false)?;
         Ok(())
     }
 

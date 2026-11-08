@@ -2731,6 +2731,36 @@ async def set_rollover(request: RolloverUpdate, client: AnkiConnectClient = Depe
     return {"hour": request.hour}
 
 
+# "Show in Study": the Anki decks, stories and Quizlet sets hidden from Study, kept in the
+# collection's config so they sync to every device (the iPhone engine uses the same key).
+STUDY_HIDDEN_KEY = "ankibase_study_hidden"
+
+
+class StudyHidden(BaseModel):
+    anki: list[int] = []
+    stories: list[int] = []
+    quizlet: list[int] = []
+
+
+@app.get("/api/collection/study-hidden")
+async def get_study_hidden(client: AnkiConnectClient = Depends(get_anki_client), _: dict = Depends(require_auth)):
+    try:
+        value = await client.rpc("config.get", key=STUDY_HIDDEN_KEY)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Couldn't reach Anki: {e}")
+    return {"hidden": StudyHidden(**value).model_dump() if isinstance(value, dict) else None}
+
+
+@app.put("/api/collection/study-hidden")
+async def set_study_hidden(request: StudyHidden, client: AnkiConnectClient = Depends(get_anki_client),
+                           _: dict = Depends(require_auth)):
+    try:
+        await client.rpc("config.set", key=STUDY_HIDDEN_KEY, value=request.model_dump())
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Couldn't reach Anki: {e}")
+    return {"hidden": request.model_dump()}
+
+
 # Stats HTML endpoint
 # Full statistics (Anki's stats screen + Quizlet) for the Stats tab
 @app.get("/api/stats/overview")

@@ -11,7 +11,7 @@ import { Toggle } from './quizlet/ui';
 import { setShownInStudy, useHiddenFromStudy, type StudyKind } from '../studyShows';
 
 /** "Show in Study", under the name in the rename modals: whether the Study page and its badge
- *  include it (on this device; studyShows.ts). Saved right away. */
+ *  include it (synced with the collection; studyShows.ts). Saved right away. */
 function ShowInStudy({ kind, id, hidden }: { kind: StudyKind; id: number; hidden: number[] }) {
   const shown = !hidden.includes(id);
   return (

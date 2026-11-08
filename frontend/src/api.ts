@@ -723,7 +723,13 @@ export const collection = {
   rollover: () => fetchAPI<{ hour: number }>('/collection/rollover'),
   setRollover: (hour: number) =>
     fetchAPI<{ hour: number }>('/collection/rollover', { method: 'PUT', body: JSON.stringify({ hour }) }),
+  /** "Show in Study": what's hidden from Study, kept in the collection (null: never saved). */
+  studyHidden: () => fetchAPI<{ hidden: StudyHiddenIds | null }>('/collection/study-hidden'),
+  setStudyHidden: (hidden: StudyHiddenIds) =>
+    fetchAPI<{ hidden: StudyHiddenIds }>('/collection/study-hidden', { method: 'PUT', body: JSON.stringify(hidden) }),
 };
+
+export interface StudyHiddenIds { anki: number[]; stories: number[]; quizlet: number[] }
 
 export const stats = {
   overview: (p: { deck?: string; anki?: boolean; quizlet?: string; period: StatsPeriod; refresh?: boolean }) => {
