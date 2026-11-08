@@ -1,5 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef } from 'react';
-import { Globe, Palette, RotateCcw, X, Download, Upload, Trash2, Sparkles, Users, User as UserIcon, Check, ChevronRight, RefreshCw, Server, Bell, Sun, Moon, SunMoon, Sunrise, ScrollText } from 'lucide-react';
+import { Globe, Palette, RotateCcw, X, Download, Upload, Trash2, Sparkles, Users, User as UserIcon, Check, ChevronRight, RefreshCw, Server, Bell, Sun, Moon, SunMoon, Sunrise, ScrollText, Lightbulb } from 'lucide-react';
 import { Segmented, Toggle } from '../components/quizlet/ui';
 import { AiPanel, type AiChoice } from '../components/story/AiPanel';
 import { useSpring } from '../hooks/useSpring';
@@ -12,6 +12,7 @@ import { RemindersSection } from '../components/settings/RemindersSection';
 import { DailyStorySection } from '../components/settings/DailyStorySection';
 import { StudySection } from '../components/settings/StudySection';
 import { WhatsNewSection } from '../components/settings/WhatsNewSection';
+import { SuggestionsAdminSection } from '../components/settings/SuggestionsAdminSection';
 import { SsoSection } from '../components/settings/SsoSection';
 import { SsoAdminSection } from '../components/settings/SsoAdminSection';
 import { canRemind, device, hasServer, isNative, luminance, onSystemAppearance, systemPrefersDark, useAppStatus } from '../native';
@@ -185,7 +186,7 @@ function isValidThemeFile(data: unknown): data is ThemeFile {
     .every(k => typeof b[k] === 'string');
 }
 
-type SettingsTab = 'appearance' | 'study' | 'sync' | 'reminders' | 'server' | 'language' | 'account' | 'ai' | 'users' | 'changes';
+type SettingsTab = 'appearance' | 'study' | 'sync' | 'reminders' | 'server' | 'language' | 'account' | 'ai' | 'users' | 'suggestions' | 'changes';
 
 /** Vertical section list (desktop) with the spring highlight. */
 function SectionNav({ sections, active, onChange }: { sections: { id: SettingsTab; label: string; icon: React.ReactNode }[]; active: SettingsTab; onChange: (t: SettingsTab) => void }) {
@@ -577,6 +578,7 @@ export function Settings() {
     ...(serverFeatures ? [{ id: 'account' as const, label: t('settings.sections.account'), icon: <UserIcon className="w-4 h-4" /> }] : []),
     ...(serverFeatures && (perms?.use_ai ?? true) ? [{ id: 'ai' as const, label: t('settings.sections.ai'), icon: <Sparkles className="w-4 h-4" /> }] : []),
     ...(serverFeatures && currentUser?.is_admin ? [{ id: 'users' as const, label: t('settings.sections.users'), icon: <Users className="w-4 h-4" /> }] : []),
+    ...(serverFeatures && currentUser?.is_admin ? [{ id: 'suggestions' as const, label: 'Suggestions', icon: <Lightbulb className="w-4 h-4" /> }] : []),
     { id: 'changes', label: 'What’s new', icon: <ScrollText className="w-4 h-4" /> },
   ];
   const active = sections.some(x => x.id === tab) ? tab : 'appearance';
@@ -816,7 +818,8 @@ export function Settings() {
           </>)}
 
           {active === 'study' && <StudySection />}
-          {active === 'changes' && <WhatsNewSection />}
+          {active === 'changes' && <WhatsNewSection canSuggest={serverFeatures && !!currentUser} />}
+          {active === 'suggestions' && currentUser?.is_admin && <SuggestionsAdminSection />}
           {active === 'sync' && <SyncSection admin={serverFeatures && !!currentUser?.is_admin} />}
           {active === 'reminders' && <RemindersSection />}
           {active === 'server' && <ServerSection user={app?.server ? currentUser : null} />}

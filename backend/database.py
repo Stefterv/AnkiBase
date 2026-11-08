@@ -474,7 +474,49 @@ def init_db():
             )
         """)
         conn.execute("DELETE FROM login_sessions WHERE expires_at < ?", (int(time.time()),))
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS suggestions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                username TEXT NOT NULL,
+                text TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                done INTEGER NOT NULL DEFAULT 0
+            )
+        """)
         conn.commit()
+
+
+# Suggestions: ideas users send to the admins (Settings → What's new / Suggestions).
+
+def add_suggestion(user_id: int, username: str, text: str) -> int:
+    with get_db() as conn:
+        cursor = conn.execute("INSERT INTO suggestions (user_id, username, text) VALUES (?, ?, ?)",
+                              (user_id, username, text))
+        conn.commit()
+        return cursor.lastrowid
+
+
+def list_suggestions() -> list[dict]:
+    """Newest first; open ones before done ones."""
+    with get_db() as conn:
+        rows = conn.execute("SELECT id, username, text, created_at, done FROM suggestions "
+                            "ORDER BY done, created_at DESC, id DESC").fetchall()
+        return [{**dict(r), "done": bool(r["done"])} for r in rows]
+
+
+def set_suggestion_done(suggestion_id: int, done: bool) -> bool:
+    with get_db() as conn:
+        cursor = conn.execute("UPDATE suggestions SET done = ? WHERE id = ?", (int(done), suggestion_id))
+        conn.commit()
+        return cursor.rowcount > 0
+
+
+def delete_suggestion(suggestion_id: int) -> bool:
+    with get_db() as conn:
+        cursor = conn.execute("DELETE FROM suggestions WHERE id = ?", (suggestion_id,))
+        conn.commit()
+        return cursor.rowcount > 0
 
 
 class LoginSessions:

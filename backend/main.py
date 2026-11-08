@@ -614,6 +614,46 @@ async def list_users(_: dict = Depends(require_admin)):
     return {"users": [_user_row(u) for u in get_all_users()], "profiles": get_all_accounts()}
 
 
+# Suggestions: any logged-in user can send one; the admins read them in Settings → Suggestions.
+class SuggestionRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+
+
+class SuggestionUpdate(BaseModel):
+    done: bool
+
+
+@app.post("/api/suggestions")
+async def send_suggestion(request: SuggestionRequest, user: dict = Depends(require_auth)):
+    from database import add_suggestion
+    text = request.text.strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Write your suggestion first")
+    return {"success": True, "id": add_suggestion(user["user_id"], user["username"], text)}
+
+
+@app.get("/api/suggestions")
+async def get_suggestions(_: dict = Depends(require_admin)):
+    from database import list_suggestions
+    return {"suggestions": list_suggestions()}
+
+
+@app.patch("/api/suggestions/{suggestion_id}")
+async def update_suggestion(suggestion_id: int, request: SuggestionUpdate, _: dict = Depends(require_admin)):
+    from database import set_suggestion_done
+    if not set_suggestion_done(suggestion_id, request.done):
+        raise HTTPException(status_code=404, detail="Suggestion not found")
+    return {"success": True}
+
+
+@app.delete("/api/suggestions/{suggestion_id}")
+async def remove_suggestion(suggestion_id: int, _: dict = Depends(require_admin)):
+    from database import delete_suggestion
+    if not delete_suggestion(suggestion_id):
+        raise HTTPException(status_code=404, detail="Suggestion not found")
+    return {"success": True}
+
+
 def _validate_username(name: str) -> str:
     import re
     name = name.strip()

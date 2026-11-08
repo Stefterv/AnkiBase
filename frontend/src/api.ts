@@ -731,6 +731,18 @@ export const collection = {
 
 export interface StudyHiddenIds { anki: number[]; stories: number[]; quizlet: number[] }
 
+export interface Suggestion { id: number; username: string; text: string; created_at: string; done: boolean }
+
+/** Ideas users send to the admins (Settings → What's new); admins read them in Settings → Suggestions. */
+export const suggestions = {
+  send: (text: string) =>
+    fetchAPI<{ success: boolean; id: number }>('/suggestions', { method: 'POST', body: JSON.stringify({ text }) }),
+  list: () => fetchAPI<{ suggestions: Suggestion[] }>('/suggestions'),
+  setDone: (id: number, done: boolean) =>
+    fetchAPI<{ success: boolean }>(`/suggestions/${id}`, { method: 'PATCH', body: JSON.stringify({ done }) }),
+  remove: (id: number) => fetchAPI<{ success: boolean }>(`/suggestions/${id}`, { method: 'DELETE' }),
+};
+
 export const stats = {
   overview: (p: { deck?: string; anki?: boolean; quizlet?: string; period: StatsPeriod; refresh?: boolean }) => {
     const q = new URLSearchParams({
