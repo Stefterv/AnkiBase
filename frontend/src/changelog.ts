@@ -8,6 +8,12 @@ export interface ChangelogDay {
 
 export const CHANGELOG: ChangelogDay[] = [
   {
+    date: '2026-11-09',
+    changes: [
+      'Daily story: renaming or moving its deck no longer stops it. When it can’t write today’s story, Settings → AI → Daily story tells you why. It also gets past a word field the deck no longer has, and category weights that leave no cards to pick from.',
+    ],
+  },
+  {
     date: '2026-11-08',
     changes: [
       'Settings → What’s new: send your admin a suggestion. Admins read them in Settings → Suggestions.',

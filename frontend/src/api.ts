@@ -343,6 +343,8 @@ export interface LookupResult {
 export interface DailyStoryRecipe {
   source: 'anki' | 'quizlet' | 'custom';
   deck?: string; field?: string; set?: string; side?: 'term' | 'definition';
+  /** Set by the server: the deck's id, so the daily story follows it when it's renamed. */
+  deck_id?: number;
   count: number; weights?: Record<string, number>; q_starred?: boolean; q_missed?: boolean;
   /** Typed-in words ("My words", or added to the picked ones). */
   words?: string[];
@@ -350,7 +352,11 @@ export interface DailyStoryRecipe {
   language: string; target_language?: string; level?: string;
   provider?: string; model?: string; deck_name?: string; lookup_fields?: string[];
 }
-export interface DailyStory { enabled: boolean; recipe: DailyStoryRecipe | null; tz: string | null }
+export interface DailyStory {
+  enabled: boolean; recipe: DailyStoryRecipe | null; tz: string | null;
+  /** Why the last try didn't write a story (the deck is gone…), until one is written. */
+  problem?: string | null;
+}
 
 export const story = {
   daily: () => fetchAPI<DailyStory>('/story/daily'),

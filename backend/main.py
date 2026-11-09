@@ -1335,7 +1335,8 @@ class DailyStoryRequest(BaseModel):
 async def get_daily_story(_: dict = Depends(require_auth)):
     """The daily story setting: whether it's on, and the settings it writes with."""
     config = get_story_setting("daily") or {}
-    return {"enabled": bool(config.get("enabled")), "recipe": config.get("recipe"), "tz": config.get("tz")}
+    return {"enabled": bool(config.get("enabled")), "recipe": config.get("recipe"), "tz": config.get("tz"),
+            "problem": config.get("problem") if config.get("enabled") else None}
 
 
 @app.put("/api/story/daily")
@@ -1350,11 +1351,15 @@ async def set_daily_story(request: DailyStoryRequest, user: dict = Depends(requi
     }
     if config["enabled"] and not config["recipe"]:
         raise HTTPException(status_code=400, detail="Choose the words for the daily story first")
+    import daily_story
+    try:  # remember the deck by id too, so renaming it later doesn't lose it
+        await daily_story.follow_deck(config["recipe"], get_anki_client())
+    except Exception:
+        pass  # Anki not ready: the daily run fills it in
     set_story_setting("daily", config)
     if config["enabled"]:
-        import daily_story
         daily_story.kick(get_active_account())
-    return {"enabled": config["enabled"], "recipe": config["recipe"], "tz": config["tz"]}
+    return {"enabled": config["enabled"], "recipe": config["recipe"], "tz": config["tz"], "problem": None}
 
 
 @app.get("/api/stories")

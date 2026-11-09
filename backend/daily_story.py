@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo
 
 from database import (
     get_account_db_path, get_all_accounts, get_story_setting, get_user,
-    get_user_accessible_containers, latest_story,
+    get_user_accessible_containers, latest_story, set_story_setting,
 )
 from security import can, current_profile
 
@@ -49,6 +49,14 @@ def pick_weighted(data: dict, weights: dict, count: int) -> list[str]:
             take[c] += more
             left -= more
     return [w for c in cats for w in random.sample(by.get(c, []), take[c])]
+
+
+def pick_any(data: dict, count: int) -> list[str]:
+    """When the weights leave nothing to pick (e.g. only "learning" weighted, and nothing
+    is being learned): any words that aren't suspended or buried."""
+    cats = data.get("categories", {})
+    words = [w for w in data.get("words", []) if cats.get(w) not in ("suspended", "buried")]
+    return random.sample(words, min(count, len(words)))
 
 
 def pick_quizlet(data: dict, starred_first: bool, missed_first: bool, count: int) -> list[str]:
@@ -109,8 +117,27 @@ def _due(container: str, config: dict, rollover: int) -> bool:
     return True
 
 
+async def follow_deck(recipe: Optional[dict], client) -> bool:
+    """Keep an Anki recipe on its deck by id, so renaming (or moving) the deck doesn't lose
+    it: fills in the id from the name, or the current name from the id. True when the
+    recipe changed (save it)."""
+    if not recipe or recipe.get("source") != "anki" or not recipe.get("deck"):
+        return False
+    decks = await client.get_deck_names_and_ids()
+    names = {did: name for name, did in decks.items()}
+    did = recipe.get("deck_id")
+    if did in names and names[did] != recipe["deck"]:
+        recipe["deck"] = recipe["deck_name"] = names[did]
+        return True
+    if did not in names and recipe["deck"] in decks:
+        recipe["deck_id"] = decks[recipe["deck"]]
+        return True
+    return False
+
+
 async def _request_for(config: dict, user: dict):
-    """The Story tab's request, with today's words picked from the recipe's source."""
+    """The Story tab's request, with today's words picked from the recipe's source, or
+    (None, why) when there's nothing to write with."""
     from main import StoryRequest, get_anki_client, get_deck_words
     from database import get_quizlet_set_words
     recipe = config["recipe"]
@@ -118,21 +145,36 @@ async def _request_for(config: dict, user: dict):
     count = int(recipe.get("count") or 15)
     words: list[str] = []
     word_data: dict = {}
+    problem = "There are no words to write with. Choose a deck or a set in the Story tab."
     if source == "anki" and recipe.get("deck"):
-        data = await get_deck_words(deck_name=recipe["deck"], limit=500, field=recipe.get("field") or "",
-                                    client=get_anki_client(), _=user)
-        words = pick_weighted(data, recipe.get("weights") or {}, count)
+        deck = recipe["deck"]
+        client = get_anki_client()
+        data = await get_deck_words(deck_name=deck, limit=500, field=recipe.get("field") or "", client=client, _=user)
+        if not data.get("words") and recipe.get("field") and data.get("total"):
+            # The chosen field isn't on these notes (anymore): let it find the word field.
+            data = await get_deck_words(deck_name=deck, limit=500, field="", client=client, _=user)
+        words = pick_weighted(data, recipe.get("weights") or {}, count) or pick_any(data, count)
         word_data = data.get("word_data") or {}
+        if not data.get("total"):
+            problem = (f"The deck “{deck.replace('::', ' › ')}” has no cards. Was it renamed or deleted? "
+                       "Choose it again in the Story tab.")
+        elif not data.get("words"):
+            problem = f"No words found in the deck “{deck.replace('::', ' › ')}”. Choose its word field in the Story tab."
+        else:
+            problem = f"Every card in the deck “{deck.replace('::', ' › ')}” is suspended or buried."
     elif source == "quizlet" and recipe.get("set"):
         data = get_quizlet_set_words(user["id"], int(recipe["set"]),
                                      "definition" if recipe.get("side") == "definition" else "term")
         if data:
             words = pick_quizlet(data, recipe.get("q_starred", True), recipe.get("q_missed", True), count)
             word_data = data.get("word_data") or {}
+            problem = "The Quizlet set has no cards."
+        else:
+            problem = "The Quizlet set is gone. Choose another one in the Story tab."
     # The words typed in yourself ("My words", or added to the picked ones).
     words = list(dict.fromkeys(words + [w for w in recipe.get("words") or [] if w]))
     if not words:
-        return None
+        return None, problem
     return StoryRequest(
         words=words,
         word_data={w: word_data[w] for w in words if w in word_data} or None,
@@ -146,7 +188,7 @@ async def _request_for(config: dict, user: dict):
         model=recipe.get("model"),
         deck_name=recipe.get("deck_name"),
         lookup_fields=recipe.get("lookup_fields"),
-    )
+    ), None
 
 
 async def run(account: dict, force: bool = False) -> None:
@@ -176,18 +218,36 @@ async def run(account: dict, force: bool = False) -> None:
             return
         if account["id"] not in {p["id"] for p in get_user_accessible_containers(user["id"])}:
             return
-        request = await _request_for(config, user)
+        from main import get_anki_client as anki
+        try:
+            if await follow_deck(config.get("recipe"), anki()):
+                set_story_setting("daily", config, container)
+        except Exception:  # Anki not ready: the words below say so
+            pass
+        request, problem = await _request_for(config, user)
         if request is None:
-            print(f"Daily story ({container}): no words to write with")
+            print(f"Daily story ({container}): {problem}")
+            _note_problem(container, problem)
             return
         from main import write_story
         result = await write_story(request)
         print(f"Daily story ({container}): wrote \"{result['title']}\"")
+        _note_problem(container, None)
     except Exception as e:
         print(f"Daily story ({container}) failed: {e}")
+        _note_problem(container, f"Couldn’t write today’s story: {getattr(e, 'detail', None) or e}")
     finally:
         _running.discard(container)
         current_profile.reset(token)
+
+
+def _note_problem(container: str, problem: Optional[str]) -> None:
+    """Keep why the last try didn't write a story, for Settings → AI → Daily story (cleared
+    once one is written, or when the setting is saved again)."""
+    config = get_story_setting("daily", container)
+    if config and config.get("problem") != problem:
+        config["problem"] = problem
+        set_story_setting("daily", config, container)
 
 
 _tasks: set[asyncio.Task] = set()

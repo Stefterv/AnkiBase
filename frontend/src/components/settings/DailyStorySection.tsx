@@ -38,7 +38,9 @@ export function DailyStorySection() {
   const prefs = loadPrefs();
   const current = dailyRecipe(prefs, loadAi(), setTitles[prefs.set]);
   const shown = daily?.enabled ? daily.recipe : current;
-  const changed = !!(daily?.enabled && current && JSON.stringify(current) !== JSON.stringify(daily.recipe));
+  // The server adds the deck's id (it follows renames): not a change of settings.
+  const saved = daily?.recipe ? { ...daily.recipe, deck_id: undefined } : null;
+  const changed = !!(daily?.enabled && current && JSON.stringify(current) !== JSON.stringify(saved));
 
   const save = async (enabled: boolean, recipe?: DailyStoryRecipe) => {
     setBusy(true); setError(null);
@@ -74,6 +76,10 @@ export function DailyStorySection() {
         <p className="text-sm text-(--text-secondary)">
           Choose an Anki deck or a Quizlet set and an AI in the <Link to="/story" className="text-(--accent) hover:underline">Story tab</Link> first: the daily story writes with those.
         </p>
+      )}
+
+      {daily?.enabled && daily.problem && (
+        <p className="text-xs text-(--error)">Today’s story wasn’t written: {daily.problem}</p>
       )}
 
       {shown && (
