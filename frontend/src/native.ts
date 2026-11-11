@@ -127,7 +127,8 @@ export function syncNativeTheme() {
 
 // --- Reminders (iPhone): a daily notification and the icon's badge ------------------
 
-export interface ReminderSettings { enabled: boolean; hour: number; minute: number; denied?: boolean }
+/** `snooze`: minutes the badge stays off after studying a card or word (0 = never). */
+export interface ReminderSettings { enabled: boolean; hour: number; minute: number; snooze?: number; denied?: boolean }
 
 /** Only the iPhone app has reminders so far. */
 export const canRemind = native?.platform === 'ios' && !!native.reminders;

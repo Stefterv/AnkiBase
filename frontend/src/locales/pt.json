@@ -267,6 +267,11 @@
     "title": "Lembretes",
     "description": "Uma notificação todos os dias quando há baralhos atrasados, e um indicador no ícone do app com quantos são.",
     "time": "Lembrar às",
+    "snooze": "Pausar o emblema depois de estudar",
+    "snoozeHint": "Basta um cartão ou uma palavra para o esconder por um tempo",
+    "snoozeOff": "Desligado",
+    "minutes": "{{count}} min",
+    "hours": "{{count}} h",
     "denied": "As notificações do AnkiBase estão desativadas. Ative-as em Ajustes do iOS → Notificações → AnkiBase.",
     "notification": {
       "title": "Hora de estudar",

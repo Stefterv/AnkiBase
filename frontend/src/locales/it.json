@@ -267,6 +267,11 @@
     "title": "Promemoria",
     "description": "Una notifica ogni giorno quando ci sono mazzi arretrati, e un badge sull’icona dell’app con quanti sono.",
     "time": "Ricordamelo alle",
+    "snooze": "Sospendi il badge dopo lo studio",
+    "snoozeHint": "Basta una carta o una parola per nasconderlo per un po'",
+    "snoozeOff": "No",
+    "minutes": "{{count}} min",
+    "hours": "{{count}} h",
     "denied": "Le notifiche di AnkiBase sono disattivate. Attivale in Impostazioni di iOS → Notifiche → AnkiBase.",
     "notification": {
       "title": "È ora di studiare",

@@ -8,6 +8,12 @@ export interface ChangelogDay {
 
 export const CHANGELOG: ChangelogDay[] = [
   {
+    date: '2026-11-11',
+    changes: [
+      'Settings → Reminders (iPhone): snooze the app icon’s badge after studying. Once you’ve done even one card or Quizlet word, the badge stays away for 1 minute up to 2 hours, then comes back if decks are still waiting.',
+    ],
+  },
+  {
     date: '2026-11-09',
     changes: [
       'Daily story: renaming or moving its deck no longer stops it. When it can’t write today’s story, Settings → AI → Daily story tells you why. It also gets past a word field the deck no longer has, and category weights that leave no cards to pick from.',

@@ -199,7 +199,7 @@ struct WebAppView: UIViewRepresentable {
                 }
             case "reminders":
                 Reminders.shared.update(enabled: body["enabled"] as? Bool ?? false, hour: body["hour"] as? Int ?? 9,
-                                        minute: body["minute"] as? Int ?? 0,
+                                        minute: body["minute"] as? Int ?? 0, snooze: body["snooze"] as? Int ?? 0,
                                         strings: body["strings"] as? [String: String] ?? [:]) { [weak self] state in
                     self?.send("ankibase-reminders", state)
                 }

@@ -168,7 +168,8 @@ impl Engine {
     /// The top-level decks that are behind (reviews or learning cards due) on each of the
     /// next `days` Anki days, if nothing is studied in between: the app's badge and daily
     /// reminders. Each day says when it starts (its rollover, as a Unix time). Decks hidden
-    /// with "Show in Study" don't count, as on the Study page.
+    /// with "Show in Study" don't count, as on the Study page. `studied`: when a card was
+    /// last answered.
     pub fn behind(&mut self, days: u32) -> Outcome<Value> {
         let hidden = self.study_hidden()?.unwrap_or_default().anki;
         let col = self.col()?;
@@ -205,7 +206,14 @@ impl Engine {
                 json!({"starts": next_day_at + (day as i64 - 1) * 86_400, "decks": decks})
             })
             .collect();
-        Ok(json!({"days": days}))
+        // When a card was last answered (Unix time), for the badge's snooze after studying.
+        // Manual reschedules (ease 0) aren't studying.
+        let last: Option<i64> = col
+            .storage
+            .db()
+            .query_row("select max(id) from revlog where ease > 0", [], |row| row.get(0))
+            .map_err(AnkiError::from)?;
+        Ok(json!({"days": days, "studied": last.map(|ms| ms / 1000)}))
     }
 
     // Preferences --------------------------------------------------------------------

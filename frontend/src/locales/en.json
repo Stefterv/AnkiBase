@@ -267,6 +267,11 @@
     "title": "Reminders",
     "description": "A notification every day when decks are behind, and a badge on the app icon with how many.",
     "time": "Remind me at",
+    "snooze": "Snooze the badge after studying",
+    "snoozeHint": "Even one card or word hides it for a while",
+    "snoozeOff": "Off",
+    "minutes": "{{count}} min",
+    "hours": "{{count}} h",
     "denied": "Notifications are off for AnkiBase. Turn them on in iOS Settings → Notifications → AnkiBase.",
     "notification": {
       "title": "Time to study",

@@ -267,6 +267,11 @@
     "title": "リマインダー",
     "description": "遅れているデッキがある日に通知し、その数をアプリアイコンのバッジに表示します。",
     "time": "通知する時刻",
+    "snooze": "学習後にバッジを一時停止",
+    "snoozeHint": "カードや単語を1つ学習するだけで、しばらく非表示になります",
+    "snoozeOff": "オフ",
+    "minutes": "{{count}}分",
+    "hours": "{{count}}時間",
     "denied": "AnkiBaseの通知がオフです。iOSの設定 → 通知 → AnkiBase でオンにしてください。",
     "notification": {
       "title": "学習の時間です",

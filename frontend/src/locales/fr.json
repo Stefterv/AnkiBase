@@ -267,6 +267,11 @@
     "title": "Rappels",
     "description": "Une notification chaque jour quand des paquets sont en retard, et une pastille sur l’icône de l’app avec leur nombre.",
     "time": "Me le rappeler à",
+    "snooze": "Masquer la pastille après une révision",
+    "snoozeHint": "Une seule carte ou un seul mot la masque un moment",
+    "snoozeOff": "Désactivé",
+    "minutes": "{{count}} min",
+    "hours": "{{count}} h",
     "denied": "Les notifications sont désactivées pour AnkiBase. Activez-les dans Réglages iOS → Notifications → AnkiBase.",
     "notification": {
       "title": "C’est l’heure de réviser",

@@ -267,6 +267,11 @@
     "title": "提醒",
     "description": "每天在有牌组落后时发送通知，并在应用图标上用标记显示数量。",
     "time": "提醒时间",
+    "snooze": "学习后暂停角标",
+    "snoozeHint": "只要学习一张卡片或一个单词，就会暂时隐藏",
+    "snoozeOff": "关闭",
+    "minutes": "{{count}} 分钟",
+    "hours": "{{count}} 小时",
     "denied": "AnkiBase 的通知已关闭。请在 iOS 设置 → 通知 → AnkiBase 中打开。",
     "notification": {
       "title": "该学习了",

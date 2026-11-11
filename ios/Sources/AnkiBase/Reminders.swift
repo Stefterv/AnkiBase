@@ -4,7 +4,8 @@ import UserNotifications
 /// Settings → Reminders: a daily notification naming the decks that are behind (reviews,
 /// learning or new cards to study) and the day's Quizlet session until one's done, and the
 /// app icon's badge: 1 while anything is waiting (the count of
-/// cards due is on the Study tab).
+/// cards due is on the Study tab). With a snooze set, studying even one card or Quizlet word
+/// keeps the badge off for that many minutes; a silent badge-only notification brings it back.
 ///
 /// iOS doesn't wake the app to count, so whenever the app goes to the background or a sync
 /// finishes, this schedules the next week's reminders, each with the decks the engine
@@ -17,8 +18,26 @@ final class Reminders {
         var enabled = false
         var hour = 9
         var minute = 0
+        /// Minutes the badge stays off after studying; 0 = never.
+        var snooze = 0
         /// The notification's text in the web UI's language (RemindersSection.tsx).
         var strings: [String: String] = [:]
+
+        init() {}
+
+        init(enabled: Bool, hour: Int, minute: Int, snooze: Int, strings: [String: String]) {
+            (self.enabled, self.hour, self.minute, self.snooze, self.strings) = (enabled, hour, minute, snooze, strings)
+        }
+
+        /// Settings saved before a field existed keep the rest.
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? false
+            hour = try c.decodeIfPresent(Int.self, forKey: .hour) ?? 9
+            minute = try c.decodeIfPresent(Int.self, forKey: .minute) ?? 0
+            snooze = try c.decodeIfPresent(Int.self, forKey: .snooze) ?? 0
+            strings = try c.decodeIfPresent([String: String].self, forKey: .strings) ?? [:]
+        }
     }
 
     private(set) var settings: Settings
@@ -34,14 +53,15 @@ final class Reminders {
 
     /// What the page shows (window.ankibaseNative.reminders, and after each change).
     func state(denied: Bool = false) -> [String: Any] {
-        ["enabled": settings.enabled, "hour": settings.hour, "minute": settings.minute, "denied": denied]
+        ["enabled": settings.enabled, "hour": settings.hour, "minute": settings.minute,
+         "snooze": settings.snooze, "denied": denied]
     }
 
     /// A `{type: "reminders"}` message from Settings. Turning them on asks for permission
     /// first; without it they stay off and the page says so.
-    func update(enabled: Bool, hour: Int, minute: Int, strings: [String: String],
+    func update(enabled: Bool, hour: Int, minute: Int, snooze: Int, strings: [String: String],
                 done: @escaping ([String: Any]) -> Void) {
-        settings = Settings(enabled: enabled, hour: hour, minute: minute, strings: strings)
+        settings = Settings(enabled: enabled, hour: hour, minute: minute, snooze: max(0, snooze), strings: strings)
         save()
         guard enabled else {
             refresh()
@@ -86,19 +106,30 @@ final class Reminders {
             center.setBadgeCount(0, withCompletionHandler: nil)
             return
         }
-        guard let days = behind(), let today = days.first else { return }
+        guard let (days, studied) = behind(), let today = days.first else { return }
         // One Quizlet session a day: named with the decks, today until a set was studied.
         let quizlet = quizletSession()
         let waiting = { (index: Int) -> [String] in
             guard let quizlet, index > 0 || !quizlet.studiedToday else { return days[index].decks }
             return days[index].decks + [quizlet.title]
         }
-        center.setBadgeCount(waiting(0).isEmpty ? 0 : 1, withCompletionHandler: nil)
+        // Snoozed after studying: off until the snooze ends, then back (if still waiting).
+        let now = Date()
+        let lastStudied = [studied, quizlet?.at].compactMap { $0 }.max()
+        let snoozedUntil = lastStudied.map { $0.addingTimeInterval(Double(settings.snooze) * 60) }
+        if !waiting(0).isEmpty, settings.snooze > 0, let snoozedUntil, snoozedUntil > now {
+            center.setBadgeCount(0, withCompletionHandler: nil)
+            let content = UNMutableNotificationContent()
+            content.badge = 1
+            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: max(1, snoozedUntil.timeIntervalSince(now)), repeats: false)
+            center.add(UNNotificationRequest(identifier: "badge-snooze", content: content, trigger: trigger))
+        } else {
+            center.setBadgeCount(waiting(0).isEmpty ? 0 : 1, withCompletionHandler: nil)
+        }
 
         // A reminder at the chosen time on each of the coming days, with the decks behind on
         // the Anki day it falls in (they start at the day rollover, 4am by default).
         let calendar = Calendar.current
-        let now = Date()
         let midnight = calendar.startOfDay(for: now)
         for offset in 0...Self.days {
             guard let date = calendar.date(byAdding: .day, value: offset, to: midnight),
@@ -141,15 +172,18 @@ final class Reminders {
         let decks: [String]
     }
 
-    /// The engine's prediction, asked the way the web view asks it.
-    private func behind() -> [Day]? {
-        struct Answer: Decodable { let days: [Day] }
-        return get("/api/app/behind").flatMap { try? JSONDecoder().decode(Answer.self, from: $0) }?.days
+    /// The engine's prediction, asked the way the web view asks it, and when a card was
+    /// last answered.
+    private func behind() -> (days: [Day], studied: Date?)? {
+        struct Answer: Decodable { let days: [Day]; let studied: Int64? }
+        guard let answer = get("/api/app/behind").flatMap({ try? JSONDecoder().decode(Answer.self, from: $0) })
+        else { return nil }
+        return (answer.days, answer.studied.map { Date(timeIntervalSince1970: Double($0)) })
     }
 
     /// The daily Quizlet session (the server's, or its last answer kept for offline): the set
-    /// studied last, and whether one was studied today. Nil without a server or sets.
-    private func quizletSession() -> (title: String, studiedToday: Bool)? {
+    /// studied last, when, and whether that was today. Nil without a server or sets.
+    private func quizletSession() -> (title: String, at: Date?, studiedToday: Bool)? {
         struct Answer: Decodable {
             struct QuizletSet: Decodable { let title: String }
             let has_sets: Bool
@@ -168,7 +202,7 @@ final class Reminders {
               let answer = try? JSONDecoder().decode(Answer.self, from: data),
               answer.has_sets, let set = answer.set else { return nil }
         let last = answer.at.flatMap { ISO8601DateFormatter().date(from: $0) }
-        return (set.title, last.map { Calendar.current.isDateInToday($0) } ?? false)
+        return (set.title, last, last.map { Calendar.current.isDateInToday($0) } ?? false)
     }
 
     private func get(_ target: String) -> Data? {

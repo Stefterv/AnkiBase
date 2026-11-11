@@ -267,6 +267,11 @@
     "title": "Recordatorios",
     "description": "Una notificación cada día cuando hay mazos atrasados, y un globo en el icono de la app con cuántos son.",
     "time": "Recordarme a las",
+    "snooze": "Pausar la insignia después de estudiar",
+    "snoozeHint": "Con una sola tarjeta o palabra se oculta un rato",
+    "snoozeOff": "Desactivado",
+    "minutes": "{{count}} min",
+    "hours": "{{count}} h",
     "denied": "Las notificaciones de AnkiBase están desactivadas. Actívalas en Ajustes de iOS → Notificaciones → AnkiBase.",
     "notification": {
       "title": "Hora de estudiar",

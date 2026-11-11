@@ -267,6 +267,11 @@
     "title": "Erinnerungen",
     "description": "Jeden Tag eine Mitteilung, wenn Stapel im Rückstand sind, und ein Kennzeichen am App-Symbol mit ihrer Anzahl.",
     "time": "Erinnern um",
+    "snooze": "Badge nach dem Lernen pausieren",
+    "snoozeHint": "Schon eine Karte oder ein Wort blendet es eine Weile aus",
+    "snoozeOff": "Aus",
+    "minutes": "{{count}} Min.",
+    "hours": "{{count}} Std.",
     "denied": "Mitteilungen sind für AnkiBase aus. Schalte sie in den iOS-Einstellungen → Mitteilungen → AnkiBase ein.",
     "notification": {
       "title": "Zeit zum Lernen",
